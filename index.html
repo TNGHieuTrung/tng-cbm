@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="page.title">TNG Logistics - Máy tính xếp hàng Container 3D</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar" id="navbar">
+        <div class="nav-container">
+            <a href="#" class="logo">
+                <div class="logo-icon">TNG<span>.CBM</span></div>
+                <span class="logo-label" data-i18n="nav.title">Máy tính xếp hàng Container</span>
+                <span class="logo-tag">LOGISTICS</span>
+            </a>
+            <div class="nav-right">
+                <a href="mailto:hieutrung@tng.vn" class="user-email-pill" title="Tài khoản phụ trách: hieutrung@tng.vn">
+                    <i class="fas fa-user-circle"></i> <span>hieutrung@tng.vn</span>
+                </a>
+                <div class="lang-switcher">
+                    <button class="lang-btn active" data-lang="vi" title="Tiếng Việt">🇻🇳 VI</button>
+                    <button class="lang-btn" data-lang="en" title="English">🇬🇧 EN</button>
+                </div>
+                <button class="mobile-toggle" id="mobileToggle" aria-label="Menu">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+        </div>
+        <div class="nav-menu" id="navMenu">
+            <a href="#home" data-i18n="nav.home">Trang chủ</a>
+            <a href="#calculator" data-i18n="nav.calculator">Máy tính xếp hàng</a>
+            <a href="#tools" data-i18n="nav.tools">Công cụ</a>
+            <a href="#guides" data-i18n="nav.guides">Hướng dẫn</a>
+            <a href="#contact" data-i18n="nav.contact">Liên hệ</a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero" id="home">
+        <div class="hero-bg"></div>
+        <div class="container">
+            <div class="hero-grid">
+                <div class="hero-content">
+                    <div class="hero-vessel-tag">
+                        <i class="fas fa-ship"></i> <span data-i18n="hero.vesselTag">Đội tàu vận tải biển TNG Global • Chuyến hàng quốc tế</span>
+                    </div>
+                    <span class="hero-badge" data-i18n="hero.badge">🚢 Cổng thông tin Logistics TNG • Phụ trách: hieutrung@tng.vn</span>
+                    <h1>
+                        <span class="highlight-tng" data-i18n="hero.titlePrefix">TNG Logistics</span> | 
+                        <span data-i18n="hero.title">Máy tính xếp hàng Container 3D</span>
+                    </h1>
+                    <p data-i18n="hero.desc">
+                        Lên kế hoạch xếp hàng trước khi bốc dỡ cho đội tàu chở hàng TNG và hệ thống logistics đa phương thức. Mô phỏng 3D trực quan cho container biển, rơ moóc, xe tải và toa tàu.
+                    </p>
+                    <blockquote data-i18n="hero.quote">
+                        Hệ thống tự động tính toán thể tích CBM, tải trọng, vị trí trọng tâm và tối ưu hóa không gian chứa hàng trên từng chuyến tàu vận tải của TNG.
+                    </blockquote>
+                    <div class="hero-actions">
+                        <a href="#calculator" class="btn-primary" data-i18n="hero.startBtn"><i class="fas fa-cubes"></i> Bắt đầu xếp hàng 3D</a>
+                        <a href="mailto:hieutrung@tng.vn" class="btn-tng-contact"><i class="fas fa-envelope"></i> hieutrung@tng.vn</a>
+                    </div>
+                </div>
+                <div class="hero-illustration">
+                    <div class="illustration-card">
+                        <div class="illustration-3d" id="heroGlobe"></div>
+                        <p class="illustration-caption" data-i18n="hero.caption">Đường biển, hàng không, đường bộ, đường sắt và không gian tùy chỉnh TNG.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Calculator Selector -->
+    <section class="calculator-selector" id="calculator">
+        <div class="container">
+            <div class="selector-label" data-i18n="selector.label">— CHỌN MÁY TÍNH CỦA BẠN</div>
+            <div class="selector-tabs">
+                <button class="selector-tab active" data-tab="load-planner">
+                    <i class="fas fa-cube"></i>
+                    <div>
+                        <strong data-i18n="selector.planner.title">Máy tính xếp hàng Container & Mô phỏng 3D</strong>
+                        <small data-i18n="selector.planner.desc">Lên kế hoạch bốc hàng 3D cho container biển, xe tải, hàng không</small>
+                    </div>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <button class="selector-tab" data-tab="cbm-calc">
+                    <i class="fas fa-calculator"></i>
+                    <div>
+                        <strong data-i18n="selector.cbm.title">Máy tính CBM</strong>
+                        <small data-i18n="selector.cbm.desc">Tính thể tích khối hàng hóa nhanh chóng</small>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main App: 3D Load Planner -->
+    <section class="app-section" id="loadPlanner">
+        <div class="container">
+            <div class="app-card">
+                <!-- Toolbar -->
+                <div class="app-toolbar">
+                    <div class="toolbar-left">
+                        <span class="app-version">TNG Portal v2.4</span>
+                        <span class="session-badge"><i class="fas fa-user-check"></i> <strong style="color:var(--teal)">hieutrung@tng.vn</strong></span>
+                    </div>
+                    <div class="toolbar-right">
+                        <a href="mailto:hieutrung@tng.vn" class="toolbar-btn" style="text-decoration:none;"><i class="fas fa-headset"></i> Hỗ trợ TNG</a>
+                        <button class="toolbar-btn" data-i18n="app.save"><i class="fas fa-save"></i> Lưu</button>
+                        <button class="toolbar-btn" data-i18n="app.load"><i class="fas fa-folder-open"></i> Tải</button>
+                    </div>
+                </div>
+
+                <!-- Equipment Selection -->
+                <div class="config-section">
+                    <h3 data-i18n="app.equipment.title"><i class="fas fa-ship"></i> Chọn thiết bị vận chuyển</h3>
+                    <div class="equipment-grid">
+                        <button class="equipment-btn active" data-equipment="20dc">
+                            <i class="fas fa-box"></i>
+                            <span>20' Dry Container</span>
+                            <small>20DC</small>
+                        </button>
+                        <button class="equipment-btn" data-equipment="40dc">
+                            <i class="fas fa-box"></i>
+                            <span>40' Dry Container</span>
+                            <small>40DC</small>
+                        </button>
+                        <button class="equipment-btn" data-equipment="40hc">
+                            <i class="fas fa-box"></i>
+                            <span>40' High Cube</span>
+                            <small>40HC</small>
+                        </button>
+                        <button class="equipment-btn" data-equipment="truck">
+                            <i class="fas fa-truck"></i>
+                            <span data-i18n="app.equipment.truck">Xe tải</span>
+                            <small>Truck</small>
+                        </button>
+                        <button class="equipment-btn" data-equipment="custom">
+                            <i class="fas fa-cog"></i>
+                            <span data-i18n="app.equipment.custom">Tùy chỉnh</span>
+                            <small>Custom</small>
+                        </button>
+                    </div>
+                    <div class="equipment-dims" id="equipmentDims">
+                        <span data-i18n="app.equipment.internal">Kích thước nội bộ:</span>
+                        <strong id="eqDimDisplay">5.898m × 2.352m × 2.393m</strong>
+                        <span class="eq-payload" data-i18n="app.equipment.payload">Tải trọng tối đa:</span>
+                        <strong id="eqPayload">28,200 kg</strong>
+                    </div>
+                </div>
+
+                <!-- Cargo Input -->
+                <div class="config-section">
+                    <div class="cargo-header">
+                        <h3 data-i18n="app.cargo.title"><i class="fas fa-boxes-stacked"></i> Thẻ hàng hóa</h3>
+                        <div class="cargo-view-toggle">
+                            <button class="view-btn active" data-view="cards" data-i18n="app.cargo.cards">Thẻ</button>
+                            <button class="view-btn" data-view="table" data-i18n="app.cargo.table">Bảng</button>
+                        </div>
+                    </div>
+
+                    <div class="cargo-cards" id="cargoCards">
+                        <!-- Cargo Card 1 -->
+                        <div class="cargo-card" data-cargo-id="1">
+                            <div class="cargo-card-header">
+                                <label data-i18n="app.cargo.itemName">TÊN HÀNG HÓA</label>
+                                <div class="card-actions">
+                                    <button class="action-btn" title="Nhân bản" data-i18n-title="app.cargo.duplicate"><i class="fas fa-clone"></i></button>
+                                    <button class="action-btn" title="Xem trước" data-i18n-title="app.cargo.preview"><i class="fas fa-eye"></i></button>
+                                    <button class="action-btn delete" title="Xóa" data-i18n-title="app.cargo.delete"><i class="fas fa-minus"></i></button>
+                                </div>
+                            </div>
+                            <input type="text" class="cargo-name" placeholder="Nhập tên hàng hóa..." data-i18n-placeholder="app.cargo.namePlaceholder" value="Thùng hàng A">
+
+                            <div class="dims-row">
+                                <div class="dim-input">
+                                    <label data-i18n="app.cargo.width">Rộng (cm)</label>
+                                    <input type="number" class="cargo-width" value="50" min="1">
+                                </div>
+                                <div class="dim-input">
+                                    <label data-i18n="app.cargo.length">Dài (cm)</label>
+                                    <input type="number" class="cargo-length" value="60" min="1">
+                                </div>
+                                <div class="dim-input">
+                                    <label data-i18n="app.cargo.height">Cao (cm)</label>
+                                    <input type="number" class="cargo-height" value="40" min="1">
+                                </div>
+                                <div class="dim-input">
+                                    <label data-i18n="app.cargo.qty">Số lượng</label>
+                                    <input type="number" class="cargo-qty" value="100" min="1">
+                                </div>
+                            </div>
+
+                            <div class="dims-row">
+                                <div class="dim-input">
+                                    <label data-i18n="app.cargo.weight">Trọng lượng (kg)</label>
+                                    <input type="number" class="cargo-weight" value="15" min="0" step="0.1">
+                                </div>
+                                <div class="dim-input">
+                                    <label data-i18n="app.cargo.totalWeight">Tổng KL (kg)</label>
+                                    <span class="computed-value" id="totalWeight1">1,500</span>
+                                </div>
+                                <div class="dim-input">
+                                    <label data-i18n="app.cargo.volume">Thể tích (m³)</label>
+                                    <span class="computed-value" id="totalVol1">12.000</span>
+                                </div>
+                            </div>
+
+                            <div class="cargo-options">
+                                <div class="option-group">
+                                    <label data-i18n="app.cargo.type">Loại</label>
+                                    <div class="radio-group">
+                                        <label class="radio-pill active">
+                                            <input type="radio" name="type1" value="box" checked> <i class="fas fa-cube"></i> <span data-i18n="app.cargo.box">Hộp</span>
+                                        </label>
+                                        <label class="radio-pill">
+                                            <input type="radio" name="type1" value="cylinder"> <i class="fas fa-circle"></i> <span data-i18n="app.cargo.cylinder">Trụ</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="option-group">
+                                    <label class="checkbox-pill active">
+                                        <input type="checkbox" checked> <i class="fas fa-layer-group"></i> <span data-i18n="app.cargo.stackable">Xếp chồng</span>
+                                    </label>
+                                </div>
+                                <div class="option-group">
+                                    <label data-i18n="app.cargo.color">Màu sắc</label>
+                                    <input type="color" class="color-picker" value="#dc2626">
+                                </div>
+                            </div>
+
+                            <div class="cargo-options">
+                                <div class="option-group">
+                                    <label data-i18n="app.cargo.rotation">Xoay</label>
+                                    <div class="rotation-buttons">
+                                        <button class="rot-btn active" title="Tự do"><i class="fas fa-sync-alt"></i></button>
+                                        <button class="rot-btn" title="Khóa"><i class="fas fa-lock"></i></button>
+                                    </div>
+                                    <span class="rot-label" data-i18n="app.cargo.rotFree">Chỉ ngang</span>
+                                </div>
+                                <div class="option-group">
+                                    <label data-i18n="app.cargo.loadMethod">Phương pháp</label>
+                                    <select class="select-sm">
+                                        <option data-i18n="app.cargo.floorOnly">Chỉ xếp sàn</option>
+                                        <option data-i18n="app.cargo.stackFull">Xếp đầy</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="add-cargo-btn" id="addCargoBtn">
+                        <i class="fas fa-plus"></i> <span data-i18n="app.cargo.addNew">Thêm hàng hóa mới</span>
+                    </button>
+
+                    <!-- Summary Bar -->
+                    <div class="cargo-summary">
+                        <div class="summary-item">
+                            <label data-i18n="app.summary.totalVolume">Tổng thể tích (CBM)</label>
+                            <strong id="summaryVolume">12.000 m³</strong>
+                        </div>
+                        <div class="summary-item">
+                            <label data-i18n="app.summary.totalWeight">Tổng trọng lượng</label>
+                            <strong id="summaryWeight">1,500 kg</strong>
+                        </div>
+                        <div class="summary-item">
+                            <label data-i18n="app.summary.totalItems">Tổng kiện hàng</label>
+                            <strong id="summaryItems">100</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Loading Algorithm -->
+                <div class="config-section">
+                    <h3 data-i18n="app.algo.title"><i class="fas fa-cogs"></i> Thuật toán sắp xếp</h3>
+                    <div class="algo-grid">
+                        <label class="algo-option">
+                            <input type="radio" name="algorithm" value="best-balance" checked>
+                            <span class="algo-card">
+                                <strong data-i18n="app.algo.bestBalance">Cân bằng tốt nhất</strong>
+                                <small data-i18n="app.algo.bestBalanceDesc">Mặc định - Tối ưu không gian và ổn định</small>
+                            </span>
+                        </label>
+                        <label class="algo-option">
+                            <input type="radio" name="algorithm" value="max-volume">
+                            <span class="algo-card">
+                                <strong data-i18n="app.algo.maxVolume">Tối đa thể tích</strong>
+                                <small data-i18n="app.algo.maxVolumeDesc">Ưu tiên tận dụng không gian tối đa</small>
+                            </span>
+                        </label>
+                        <label class="algo-option">
+                            <input type="radio" name="algorithm" value="easy-loading">
+                            <span class="algo-card">
+                                <strong data-i18n="app.algo.easyLoad">Dễ bốc dỡ</strong>
+                                <small data-i18n="app.algo.easyLoadDesc">Ưu tiên thuận tiện bốc/dỡ hàng</small>
+                            </span>
+                        </label>
+                        <label class="algo-option">
+                            <input type="radio" name="algorithm" value="stability">
+                            <span class="algo-card">
+                                <strong data-i18n="app.algo.stability">Ổn định trước</strong>
+                                <small data-i18n="app.algo.stabilityDesc">Ưu tiên tính ổn định của hàng hóa</small>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 3D Simulation Section -->
+    <section class="simulation-section" id="simulation">
+        <div class="container">
+            <div class="sim-card">
+                <div class="sim-header">
+                    <div class="sim-title">
+                        <span class="sim-icon">📦</span>
+                        <h2 data-i18n="sim.title">Mô phỏng xếp hàng 3D</h2>
+                    </div>
+                    <div class="sim-equipment" id="simEquipmentLabel">20' Dry Container (20DC)</div>
+                </div>
+
+                <!-- View Controls -->
+                <div class="sim-controls">
+                    <div class="control-group">
+                        <label data-i18n="sim.view">Chế độ xem</label>
+                        <div class="btn-group">
+                            <button class="ctrl-btn" data-view-mode="operational" data-i18n="sim.operational">Vận hành</button>
+                            <button class="ctrl-btn active" data-view-mode="realistic" data-i18n="sim.realistic">Thực tế</button>
+                            <button class="ctrl-btn" data-view-mode="xray" data-i18n="sim.xray">X-Ray</button>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label data-i18n="sim.camera">Góc nhìn</label>
+                        <div class="btn-group">
+                            <button class="ctrl-btn active" data-camera="isometric" data-i18n="sim.isometric">Phối cảnh</button>
+                            <button class="ctrl-btn" data-camera="door" data-i18n="sim.door">Cửa</button>
+                            <button class="ctrl-btn" data-camera="top" data-i18n="sim.top">Trên</button>
+                            <button class="ctrl-btn" data-camera="side" data-i18n="sim.side">Bên</button>
+                            <button class="ctrl-btn" data-camera="reset" title="Reset"><i class="fas fa-undo"></i></button>
+                        </div>
+                    </div>
+                    <div class="control-group height-control">
+                        <label><input type="checkbox" id="heightSectionToggle"> <span data-i18n="sim.heightSection">Cắt lớp chiều cao</span></label>
+                        <input type="range" id="heightSlider" min="0" max="100" value="100" class="height-slider" disabled>
+                        <span id="heightLabel" data-i18n="sim.fullView">Toàn bộ</span>
+                    </div>
+                    <button class="fullscreen-btn" id="fullscreenBtn">
+                        <i class="fas fa-expand"></i> <span data-i18n="sim.fullscreen">Toàn màn hình</span>
+                    </button>
+                </div>
+
+                <!-- 3D Canvas -->
+                <div class="sim-viewport" id="simViewport">
+                    <canvas id="simCanvas"></canvas>
+                    <!-- HUD Overlay -->
+                    <div class="sim-hud" id="simHud">
+                        <div class="hud-item">
+                            <span class="hud-label">Container 1</span>
+                        </div>
+                        <div class="hud-item">
+                            <span class="hud-label" data-i18n="sim.hud.placed">Đã xếp:</span>
+                            <span class="hud-value" id="hudPlaced">0</span>
+                        </div>
+                        <div class="hud-item">
+                            <span class="hud-label" data-i18n="sim.hud.volume">Thể tích:</span>
+                            <span class="hud-value" id="hudVolume">0 m³</span>
+                        </div>
+                        <div class="hud-item">
+                            <span class="hud-label" data-i18n="sim.hud.weight">Khối lượng:</span>
+                            <span class="hud-value" id="hudWeight">0 kg</span>
+                        </div>
+                        <div class="hud-item">
+                            <span class="hud-label" data-i18n="sim.hud.utilization">Sử dụng:</span>
+                            <span class="hud-value hud-green" id="hudUtil">0%</span>
+                        </div>
+                    </div>
+                    <!-- Loading Overlay -->
+                    <div class="sim-loading" id="simLoading" style="display:none;">
+                        <div class="loading-spinner"></div>
+                        <p data-i18n="sim.loading">Đang tính toán bố trí xếp hàng...</p>
+                        <div class="loading-bar"><div class="loading-fill" id="loadingFill"></div></div>
+                    </div>
+                </div>
+
+                <p class="sim-note" data-i18n="sim.note">Hình dạng bên ngoài thiết bị chỉ mang tính minh họa. Trong chế độ xem thực tế, các bức tường gần sẽ ẩn để hiển thị hàng hóa; kích thước và quy tắc xếp hàng không thay đổi.</p>
+
+                <!-- Results -->
+                <div class="sim-results" id="simResults" style="display:none;">
+                    <div class="result-card">
+                        <h4>Container 1</h4>
+                        <table class="result-table">
+                            <tr>
+                                <td data-i18n="sim.result.placed">Kiện hàng đã xếp</td>
+                                <td class="result-value" id="resultPlaced">100</td>
+                            </tr>
+                            <tr>
+                                <td data-i18n="sim.result.volume">Thể tích hàng</td>
+                                <td class="result-value" id="resultVolume">12.000 m³</td>
+                            </tr>
+                            <tr>
+                                <td data-i18n="sim.result.mass">Tổng khối lượng</td>
+                                <td class="result-value" id="resultMass">1,500.0 kg</td>
+                            </tr>
+                            <tr>
+                                <td data-i18n="sim.result.utilization">Tỉ lệ sử dụng</td>
+                                <td class="result-value result-highlight" id="resultUtil">78.5%</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CBM Calculator (simple) -->
+    <section class="cbm-section" id="cbmCalc" style="display:none;">
+        <div class="container">
+            <div class="app-card">
+                <h3 data-i18n="cbm.title"><i class="fas fa-calculator"></i> Máy tính CBM (Thể tích khối)</h3>
+                <p class="section-desc" data-i18n="cbm.desc">Tính nhanh thể tích CBM cho lô hàng của bạn.</p>
+                <div class="cbm-form">
+                    <div class="cbm-row">
+                        <div class="cbm-input">
+                            <label data-i18n="cbm.width">Rộng (cm)</label>
+                            <input type="number" id="cbmWidth" value="50">
+                        </div>
+                        <div class="cbm-input">
+                            <label data-i18n="cbm.length">Dài (cm)</label>
+                            <input type="number" id="cbmLength" value="60">
+                        </div>
+                        <div class="cbm-input">
+                            <label data-i18n="cbm.height">Cao (cm)</label>
+                            <input type="number" id="cbmHeight" value="40">
+                        </div>
+                        <div class="cbm-input">
+                            <label data-i18n="cbm.qty">Số lượng</label>
+                            <input type="number" id="cbmQty" value="1">
+                        </div>
+                    </div>
+                    <button class="btn-primary" id="cbmCalcBtn" data-i18n="cbm.calculate">
+                        <i class="fas fa-calculator"></i> Tính CBM
+                    </button>
+                    <div class="cbm-result" id="cbmResult">
+                        <div class="cbm-result-item">
+                            <label data-i18n="cbm.perUnit">CBM mỗi kiện</label>
+                            <strong id="cbmPerUnit">0.120 m³</strong>
+                        </div>
+                        <div class="cbm-result-item">
+                            <label data-i18n="cbm.total">Tổng CBM</label>
+                            <strong id="cbmTotal">0.120 m³</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tools Section -->
+    <section class="tools-section" id="tools">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag" data-i18n="tools.tag">🚛 Công cụ logistics miễn phí</span>
+                <h2 data-i18n="tools.title">Công cụ CBM, Vận tải & Xếp hàng Container</h2>
+                <p data-i18n="tools.desc">CBM3 cung cấp các công cụ trực tuyến thiết thực cho đội ngũ logistics, nhà xuất nhập khẩu, và chuyên gia thương mại quốc tế.</p>
+            </div>
+            <div class="tools-grid">
+                <div class="tool-card">
+                    <i class="fas fa-cube tool-icon"></i>
+                    <h4 data-i18n="tools.t1.title">Máy tính xếp hàng 3D</h4>
+                    <p data-i18n="tools.t1.desc">Mô phỏng 3D xếp hàng container với nhiều thuật toán tối ưu</p>
+                </div>
+                <div class="tool-card">
+                    <i class="fas fa-calculator tool-icon"></i>
+                    <h4 data-i18n="tools.t2.title">Máy tính CBM</h4>
+                    <p data-i18n="tools.t2.desc">Tính thể tích khối hàng hóa nhanh chóng và chính xác</p>
+                </div>
+                <div class="tool-card">
+                    <i class="fas fa-weight-hanging tool-icon"></i>
+                    <h4 data-i18n="tools.t3.title">Chuyển đổi đơn vị</h4>
+                    <p data-i18n="tools.t3.desc">Chuyển đổi giữa các đơn vị đo lường vận tải hàng hóa</p>
+                </div>
+                <div class="tool-card">
+                    <i class="fas fa-leaf tool-icon"></i>
+                    <h4 data-i18n="tools.t4.title">Tính phát thải CO₂</h4>
+                    <p data-i18n="tools.t4.desc">Ước tính lượng phát thải carbon từ vận chuyển hàng hóa</p>
+                </div>
+                <div class="tool-card">
+                    <i class="fas fa-ship tool-icon"></i>
+                    <h4 data-i18n="tools.t5.title">Hướng dẫn Container biển</h4>
+                    <p data-i18n="tools.t5.desc">Kích thước và thông số kỹ thuật container ISO đầy đủ</p>
+                </div>
+                <div class="tool-card">
+                    <i class="fas fa-plane tool-icon"></i>
+                    <h4 data-i18n="tools.t6.title">Hướng dẫn ULD hàng không</h4>
+                    <p data-i18n="tools.t6.desc">Thông số và kích thước đơn vị xếp hàng hàng không</p>
+                </div>
+            </div>
+            <div class="tools-cta">
+                <a href="#calculator" class="btn-primary" data-i18n="tools.startBtn"><i class="fas fa-rocket"></i> Bắt đầu mô phỏng 3D</a>
+                <a href="#tools" class="btn-outline" data-i18n="tools.browseBtn"><i class="fas fa-th-large"></i> Xem tất cả công cụ</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Guides Section -->
+    <section class="guides-section" id="guides">
+        <div class="container">
+            <div class="section-header">
+                <h2 data-i18n="guides.title">Hướng dẫn thiết bị vận tải</h2>
+                <p data-i18n="guides.desc">Thông số kỹ thuật chi tiết cho tất cả các loại phương tiện vận tải hàng hóa.</p>
+            </div>
+            <div class="guides-grid">
+                <div class="guide-card">
+                    <div class="guide-icon"><i class="fas fa-ship"></i></div>
+                    <h4 data-i18n="guides.g1.title">Container biển</h4>
+                    <p data-i18n="guides.g1.desc">20DC, 40DC, 40HC, 45HC, Open Top, Flat Rack</p>
+                </div>
+                <div class="guide-card">
+                    <div class="guide-icon"><i class="fas fa-truck"></i></div>
+                    <h4 data-i18n="guides.g2.title">Vận tải đường bộ</h4>
+                    <p data-i18n="guides.g2.desc">Xe tải, rơ moóc, xe đông lạnh, xe tải nhẹ</p>
+                </div>
+                <div class="guide-card">
+                    <div class="guide-icon"><i class="fas fa-plane"></i></div>
+                    <h4 data-i18n="guides.g3.title">Hàng không (ULD)</h4>
+                    <p data-i18n="guides.g3.desc">LD3, LD7, LD11, PMC, PAG pallet</p>
+                </div>
+                <div class="guide-card">
+                    <div class="guide-icon"><i class="fas fa-train"></i></div>
+                    <h4 data-i18n="guides.g4.title">Vận tải đường sắt</h4>
+                    <p data-i18n="guides.g4.desc">Toa xe lửa, container liên vận châu Âu</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact / Footer -->
+    <footer class="footer" id="contact">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-col">
+                    <div class="logo">
+                        <div class="logo-icon">TNG<span>.CBM</span></div>
+                    </div>
+                    <p class="footer-about" data-i18n="footer.about">Hệ thống tính toán tải trọng và mô phỏng xếp dỡ container 3D trực thuộc TNG Logistics. Tối ưu hóa năng lực vận chuyển hàng hải và chuỗi cung ứng toàn cầu.</p>
+                </div>
+                <div class="footer-col">
+                    <h4 data-i18n="footer.legal">Pháp lý & Quy chuẩn</h4>
+                    <ul>
+                        <li><a href="#" data-i18n="footer.terms">Điều khoản sử dụng TNG</a></li>
+                        <li><a href="#" data-i18n="footer.privacy">Chính sách bảo mật dữ liệu</a></li>
+                        <li><a href="#" data-i18n="footer.disclaimer">Quy định an toàn xếp dỡ</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4 data-i18n="footer.contactTitle">Thông tin liên hệ TNG</h4>
+                    <ul>
+                        <li><i class="fas fa-building" style="color:var(--teal);margin-right:6px;"></i> <strong>TNG Logistics</strong></li>
+                        <li><i class="fas fa-envelope" style="color:var(--teal);margin-right:6px;"></i> <a href="mailto:hieutrung@tng.vn" style="color:var(--teal);font-weight:600;">hieutrung@tng.vn</a></li>
+                        <li><i class="fas fa-user-tie" style="color:var(--teal);margin-right:6px;"></i> Quản trị: Hiếu Trung</li>
+                        <li><i class="fas fa-anchor" style="color:var(--teal);margin-right:6px;"></i> Đội tàu container TNG</li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4 data-i18n="footer.quickAccess">Truy cập nhanh</h4>
+                    <ul>
+                        <li><a href="#calculator" data-i18n="footer.calculator3d">Mô phỏng xếp hàng 3D</a></li>
+                        <li><a href="#tools" data-i18n="footer.allTools">Tất cả công cụ logistics</a></li>
+                        <li><a href="#guides" data-i18n="footer.equipGuides">Thông số đội tàu & Container</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>© 2024 - 2026 TNG Logistics & Cargo System. Quản lý bởi <a href="mailto:hieutrung@tng.vn" style="color:var(--teal);font-weight:600;">hieutrung@tng.vn</a>. Bảo lưu mọi quyền.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Sticky Action Bar -->
+    <div class="sticky-bar" id="stickyBar">
+        <button class="sticky-btn primary" id="planBtn">
+            <i class="fas fa-cubes"></i> <span data-i18n="sticky.plan">Mô phỏng xếp hàng 3D</span>
+        </button>
+        <button class="sticky-btn secondary" id="summaryBtn">
+            <i class="fas fa-chart-bar"></i> <span data-i18n="sticky.summary">Tổng kết</span>
+        </button>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="i18n.js"></script>
+    <script src="simulation3d.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
