@@ -503,74 +503,343 @@ class ContainerSimulation {
     }
 }
 
-// ===== Hero Mini Globe =====
+// ===== Hero 3D Cargo Hologram (High-Performance, Smooth & Lively) =====
 function initHeroGlobe() {
     const container = document.getElementById('heroGlobe');
     if (!container) return;
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0d1726);
-    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 500);
-    camera.position.set(0, 0, 100);
+    // Clear any existing canvas
+    container.innerHTML = '';
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    const width = container.clientWidth || 380;
+    const height = container.clientHeight || 300;
+
+    // 1. Scene setup
+    const scene = new THREE.Scene();
+
+    const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 1000);
+    camera.position.set(42, 22, 62);
+    camera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(renderer.domElement);
 
-    // Mini container wireframe
-    const boxGeo = new THREE.BoxGeometry(50, 20, 20);
-    const edges = new THREE.EdgesGeometry(boxGeo);
-    const wireMat = new THREE.LineBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.8 });
-    const wireBox = new THREE.LineSegments(edges, wireMat);
-    scene.add(wireBox);
+    // 2. High-Tech Dynamic Lighting
+    const ambientLight = new THREE.AmbientLight(0x1a2942, 1.2);
+    scene.add(ambientLight);
 
-    // Mini cargo boxes inside
-    const cargoColors = [0xdc2626, 0xf59e0b, 0x2563eb, 0x16a34a];
-    for (let i = 0; i < 12; i++) {
-        const size = 5 + Math.random() * 4;
-        const geo = new THREE.BoxGeometry(size, size * 0.7, size * 0.8);
-        const mat = new THREE.MeshBasicMaterial({
-            color: cargoColors[i % cargoColors.length],
-            transparent: true,
-            opacity: 0.7
-        });
-        const box = new THREE.Mesh(geo, mat);
-        box.position.set(
-            -20 + (i % 4) * 12,
-            -6 + Math.floor(i / 4) * 7,
-            -4 + (i % 2) * 8
-        );
-        scene.add(box);
+    // Main key light
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
+    keyLight.position.set(50, 70, 50);
+    keyLight.castShadow = true;
+    scene.add(keyLight);
+
+    // Cyan backlight for futuristic cyber edge glow
+    const cyanLight = new THREE.PointLight(0x00e5ff, 2.5, 120);
+    cyanLight.position.set(-40, 25, -30);
+    scene.add(cyanLight);
+
+    // Orange/Gold accent light for warm cargo reflections
+    const orangeLight = new THREE.PointLight(0xf59e0b, 2.0, 100);
+    orangeLight.position.set(40, -10, 30);
+    scene.add(orangeLight);
+
+    // 3. Main Rotating Group
+    const stageGroup = new THREE.Group();
+    scene.add(stageGroup);
+
+    // 4. Ground Holographic Grid / Pedestal
+    const gridHelper = new THREE.GridHelper(90, 18, 0x06b6d4, 0x1e3a5f);
+    gridHelper.position.y = -13.5;
+    stageGroup.add(gridHelper);
+
+    // Subtle glowing platform ring
+    const ringGeo = new THREE.RingGeometry(28, 30, 48);
+    const ringMat = new THREE.MeshBasicMaterial({
+        color: 0x06b6d4,
+        transparent: true,
+        opacity: 0.35,
+        side: THREE.DoubleSide
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = -13.4;
+    stageGroup.add(ring);
+
+    // Outer counter-rotating dashed ring
+    const ringGeo2 = new THREE.RingGeometry(38, 39, 36);
+    const ringMat2 = new THREE.MeshBasicMaterial({
+        color: 0x3b82f6,
+        transparent: true,
+        opacity: 0.2,
+        side: THREE.DoubleSide
+    });
+    const ring2 = new THREE.Mesh(ringGeo2, ringMat2);
+    ring2.rotation.x = Math.PI / 2;
+    ring2.position.y = -13.4;
+    stageGroup.add(ring2);
+
+    // 5. Container Dimensions (Accurate Proportions)
+    const cL = 52, cH = 22, cW = 22;
+
+    // Glowing wireframe outline of the container
+    const containerBoxGeo = new THREE.BoxGeometry(cL, cH, cW);
+    const containerEdges = new THREE.EdgesGeometry(containerBoxGeo);
+    const containerLineMat = new THREE.LineBasicMaterial({
+        color: 0x00e5ff,
+        transparent: true,
+        opacity: 0.85
+    });
+    const containerFrame = new THREE.LineSegments(containerEdges, containerLineMat);
+    stageGroup.add(containerFrame);
+
+    // Semi-transparent container glass walls with soft reflections
+    const wallMat = new THREE.MeshPhysicalMaterial({
+        color: 0x0f2744,
+        transparent: true,
+        opacity: 0.22,
+        roughness: 0.2,
+        metalness: 0.1,
+        transmission: 0.6,
+        side: THREE.DoubleSide,
+        depthWrite: false
+    });
+    const containerMesh = new THREE.Mesh(containerBoxGeo, wallMat);
+    stageGroup.add(containerMesh);
+
+    // 6. Vibrant Cargo Units with Dynamic Floating & Breathing Animation
+    const cargoGroup = new THREE.Group();
+    stageGroup.add(cargoGroup);
+
+    const cargoColors = [
+        { c: 0xdc2626, name: 'Red' },     // TNG Red
+        { c: 0x0284c7, name: 'Blue' },    // Ocean Blue
+        { c: 0xf59e0b, name: 'Amber' },   // Golden Cargo
+        { c: 0x10b981, name: 'Green' },   // Emerald Green
+        { c: 0x8b5cf6, name: 'Purple' }   // Violet
+    ];
+
+    const cargoUnits = [];
+    const cols = 5;
+    const rows = 2;
+    const stacks = 2;
+    const bW = 8.5;
+    const bH = 8.5;
+    const bL = 8.5;
+
+    let colorIdx = 0;
+    for (let x = 0; x < cols; x++) {
+        for (let z = 0; z < stacks; z++) {
+            for (let y = 0; y < rows; y++) {
+                // Staggered arrangement for realistic look
+                if (x === 4 && y === 1 && z === 1) continue; // irregular top stack
+                if (x === 0 && y === 1 && z === 0) continue;
+
+                const colorInfo = cargoColors[colorIdx % cargoColors.length];
+                colorIdx++;
+
+                const boxGeo = new THREE.BoxGeometry(bL - 0.4, bH - 0.4, bW - 0.4);
+                const boxMat = new THREE.MeshStandardMaterial({
+                    color: colorInfo.c,
+                    roughness: 0.35,
+                    metalness: 0.25,
+                    emissive: colorInfo.c,
+                    emissiveIntensity: 0.08
+                });
+
+                const boxMesh = new THREE.Mesh(boxGeo, boxMat);
+                boxMesh.castShadow = true;
+                boxMesh.receiveShadow = true;
+
+                // Box edges for crisp clarity
+                const boxEdgesGeo = new THREE.EdgesGeometry(boxGeo);
+                const boxEdgesMat = new THREE.LineBasicMaterial({
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.3
+                });
+                const boxEdgeLines = new THREE.LineSegments(boxEdgesGeo, boxEdgesMat);
+                boxMesh.add(boxEdgeLines);
+
+                // Base anchor position inside container
+                const baseX = -cL / 2 + bL / 2 + 3 + x * (bL + 0.6);
+                const baseY = -cH / 2 + bH / 2 + 1 + y * (bH + 0.5);
+                const baseZ = -cW / 2 + bW / 2 + 2 + z * (bW + 0.6);
+
+                boxMesh.position.set(baseX, baseY, baseZ);
+
+                // Store animation metadata
+                cargoUnits.push({
+                    mesh: boxMesh,
+                    baseX,
+                    baseY,
+                    baseZ,
+                    phase: (x * 0.5 + y * 0.8 + z * 0.3),
+                    speed: 1.8 + Math.random() * 0.6,
+                    heightOffset: (Math.random() - 0.5) * 0.6
+                });
+
+                cargoGroup.add(boxMesh);
+            }
+        }
     }
 
-    // Floating particles
-    const pCount = 50;
+    // 7. Interactive Laser / LIDAR Scanner Beam
+    const scanPlaneGeo = new THREE.PlaneGeometry(0.8, cH * 1.05);
+    const scanPlaneMat = new THREE.MeshBasicMaterial({
+        color: 0x00e5ff,
+        transparent: true,
+        opacity: 0.6,
+        side: THREE.DoubleSide
+    });
+    const scanPlane = new THREE.Mesh(scanPlaneGeo, scanPlaneMat);
+    scanPlane.rotation.y = Math.PI / 2;
+    stageGroup.add(scanPlane);
+
+    // Glowing laser line at scan plane edge
+    const laserLineGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, -cH / 2, -cW / 2),
+        new THREE.Vector3(0, cH / 2, -cW / 2),
+        new THREE.Vector3(0, cH / 2, cW / 2),
+        new THREE.Vector3(0, -cH / 2, cW / 2),
+        new THREE.Vector3(0, -cH / 2, -cW / 2)
+    ]);
+    const laserLineMat = new THREE.LineBasicMaterial({
+        color: 0x38bdf8,
+        linewidth: 2,
+        transparent: true,
+        opacity: 0.95
+    });
+    const laserFrame = new THREE.Line(laserLineGeo, laserLineMat);
+    scanPlane.add(laserFrame);
+
+    // 8. Floating Glowing Data Particles
+    const pCount = 80;
     const pGeo = new THREE.BufferGeometry();
     const pPos = new Float32Array(pCount * 3);
+    const pVel = [];
+
     for (let i = 0; i < pCount; i++) {
-        pPos[i * 3] = (Math.random() - 0.5) * 120;
-        pPos[i * 3 + 1] = (Math.random() - 0.5) * 80;
-        pPos[i * 3 + 2] = (Math.random() - 0.5) * 60;
+        pPos[i * 3] = (Math.random() - 0.5) * 110;
+        pPos[i * 3 + 1] = (Math.random() - 0.5) * 60;
+        pPos[i * 3 + 2] = (Math.random() - 0.5) * 80;
+        pVel.push({
+            x: (Math.random() - 0.5) * 0.08,
+            y: (Math.random() - 0.5) * 0.12,
+            z: (Math.random() - 0.5) * 0.08
+        });
     }
+
     pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
-    const pMat = new THREE.PointsMaterial({ color: 0x06b6d4, size: 1.5, transparent: true, opacity: 0.5 });
-    scene.add(new THREE.Points(pGeo, pMat));
+    const pMat = new THREE.PointsMaterial({
+        color: 0x00e5ff,
+        size: 1.8,
+        transparent: true,
+        opacity: 0.65,
+        blending: THREE.AdditiveBlending
+    });
+    const particles = new THREE.Points(pGeo, pMat);
+    scene.add(particles);
 
-    // Ambient
-    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    // 9. Interactive Mouse / Pointer Parallax
+    const mouse = { x: 0, y: 0, targetX: 0, targetY: 0 };
+    let isHovered = false;
 
-    function animate() {
-        requestAnimationFrame(animate);
-        wireBox.rotation.y += 0.005;
-        wireBox.rotation.x = Math.sin(Date.now() * 0.001) * 0.1;
+    container.addEventListener('mousemove', (e) => {
+        const rect = container.getBoundingClientRect();
+        mouse.targetX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.targetY = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
+        isHovered = true;
+    });
+
+    container.addEventListener('mouseleave', () => {
+        mouse.targetX = 0;
+        mouse.targetY = 0;
+        isHovered = false;
+    });
+
+    // 10. Smooth Render Loop
+    let clock = new THREE.Clock();
+
+    function renderFrame() {
+        requestAnimationFrame(renderFrame);
+        const delta = clock.getDelta();
+        const time = clock.getElapsedTime();
+
+        // Smooth mouse damping (lerp)
+        mouse.x += (mouse.targetX - mouse.x) * 0.06;
+        mouse.y += (mouse.targetY - mouse.y) * 0.06;
+
+        // Container stage rotation & gentle floating
+        const baseRotY = time * 0.45;
+        stageGroup.rotation.y = baseRotY + mouse.x * 0.5;
+        stageGroup.rotation.x = Math.sin(time * 0.8) * 0.08 + mouse.y * 0.35;
+        stageGroup.position.y = Math.sin(time * 1.5) * 1.4;
+
+        // Rotating platform rings
+        ring.rotation.z = time * 0.3;
+        ring2.rotation.z = -time * 0.2;
+
+        // Animate Laser Scanner (sweeping back and forth across container)
+        const scanX = Math.sin(time * 1.8) * (cL / 2 - 2);
+        scanPlane.position.x = scanX;
+        scanPlaneMat.opacity = 0.35 + Math.sin(time * 6) * 0.15;
+
+        // Animate each cargo box (lively rhythmic levitation & breathing)
+        for (let i = 0; i < cargoUnits.length; i++) {
+            const unit = cargoUnits[i];
+            const floatOffset = Math.sin(time * unit.speed + unit.phase) * 1.2;
+            unit.mesh.position.y = unit.baseY + floatOffset;
+
+            // Highlight box when scanner passes over it
+            const distToScan = Math.abs(unit.mesh.position.x - scanX);
+            if (distToScan < 5) {
+                unit.mesh.material.emissiveIntensity = 0.45 * (1 - distToScan / 5);
+            } else {
+                unit.mesh.material.emissiveIntensity = 0.08;
+            }
+        }
+
+        // Orbiting cyan & orange lights
+        cyanLight.position.x = Math.sin(time * 1.2) * 55;
+        cyanLight.position.z = Math.cos(time * 1.2) * 55;
+        orangeLight.position.x = -Math.sin(time * 0.9) * 45;
+        orangeLight.position.z = -Math.cos(time * 0.9) * 45;
+
+        // Animate Floating Data Particles
+        const positions = particles.geometry.attributes.position.array;
+        for (let i = 0; i < pCount; i++) {
+            positions[i * 3] += pVel[i].x;
+            positions[i * 3 + 1] += pVel[i].y;
+            positions[i * 3 + 2] += pVel[i].z;
+
+            // Boundary wrap-around
+            if (positions[i * 3] > 60 || positions[i * 3] < -60) pVel[i].x *= -1;
+            if (positions[i * 3 + 1] > 35 || positions[i * 3 + 1] < -35) pVel[i].y *= -1;
+            if (positions[i * 3 + 2] > 45 || positions[i * 3 + 2] < -45) pVel[i].z *= -1;
+        }
+        particles.geometry.attributes.position.needsUpdate = true;
+        particles.rotation.y = time * 0.05;
+
+        camera.lookAt(0, 0, 0);
         renderer.render(scene, camera);
     }
-    animate();
 
+    renderFrame();
+
+    // Responsive resize handler
     window.addEventListener('resize', () => {
-        camera.aspect = container.clientWidth / container.clientHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(container.clientWidth, container.clientHeight);
+        if (!container) return;
+        const newW = container.clientWidth;
+        const newH = container.clientHeight;
+        if (newW > 0 && newH > 0) {
+            camera.aspect = newW / newH;
+            camera.updateProjectionMatrix();
+            renderer.setSize(newW, newH);
+        }
     });
 }

@@ -18,6 +18,7 @@ const translations = {
         'hero.quote': 'Hệ thống tự động tính toán thể tích CBM, tải trọng, vị trí trọng tâm và tối ưu hóa không gian chứa hàng trên từng chuyến tàu vận tải của TNG.',
         'hero.startBtn': '<i class="fas fa-cubes"></i> Bắt đầu xếp hàng 3D',
         'hero.caption': 'Đường biển, hàng không, đường bộ, đường sắt và không gian tùy chỉnh TNG.',
+        'hero.previewLive': 'MÔ PHỎNG 3D THỜI GIAN THỰC',
 
         // Selector
         'selector.label': '— CHỌN MÁY TÍNH CỦA BẠN',
@@ -183,6 +184,7 @@ const translations = {
         'hero.quote': 'Automatically compute CBM volume, axle loads, center of gravity and maximize cargo space utilization for TNG shipping voyages.',
         'hero.startBtn': '<i class="fas fa-cubes"></i> Start 3D Load Plan',
         'hero.caption': 'Sea, air, road, rail and custom cargo spaces across TNG fleet.',
+        'hero.previewLive': 'LIVE 3D SIMULATION',
 
         // Selector
         'selector.label': '— CHOOSE YOUR CALCULATOR',
