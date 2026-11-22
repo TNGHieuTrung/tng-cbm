@@ -119,34 +119,61 @@
                     </div>
                     <div class="toolbar-right">
                         <a href="mailto:hieutrung@tng.vn" class="toolbar-btn" style="text-decoration:none;"><i class="fas fa-headset"></i> Hỗ trợ TNG</a>
-                        <button class="toolbar-btn" data-i18n="app.save"><i class="fas fa-save"></i> Lưu</button>
-                        <button class="toolbar-btn" data-i18n="app.load"><i class="fas fa-folder-open"></i> Tải</button>
+                        <button class="toolbar-btn" id="btnImportExcel" title="Nhập Excel / CSV"><i class="fas fa-file-excel"></i> <span data-i18n="app.importExcel">Nhập Excel</span></button>
+                        <button class="toolbar-btn" id="btnExportExcel" title="Xuất file Excel"><i class="fas fa-file-export"></i> <span data-i18n="app.exportExcel">Xuất Excel</span></button>
+                        <button class="toolbar-btn" id="btnDownloadTemplate" title="Tải mẫu Excel"><i class="fas fa-download"></i> <span data-i18n="app.template">Mẫu Excel</span></button>
+                        <button class="toolbar-btn" data-i18n="app.save" id="btnSaveConfig"><i class="fas fa-save"></i> Lưu</button>
+                        <button class="toolbar-btn" data-i18n="app.load" id="btnLoadConfig"><i class="fas fa-folder-open"></i> Tải</button>
                     </div>
+                    <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" style="display:none;">
                 </div>
 
                 <!-- Equipment Selection -->
                 <div class="config-section">
-                    <h3 data-i18n="app.equipment.title"><i class="fas fa-ship"></i> Chọn thiết bị vận chuyển</h3>
+                    <div class="equipment-header-row">
+                        <h3 data-i18n="app.equipment.title"><i class="fas fa-ship"></i> Chọn thiết bị vận chuyển</h3>
+                        <label class="auto-fit-toggle-label">
+                            <input type="checkbox" id="autoFitToggle" checked>
+                            <span data-i18n="app.bestFit.autoMode">⚡ Tự động chọn cont phù hợp (Best Fit)</span>
+                        </label>
+                    </div>
+
+                    <!-- Dynamic Best Fit Recommendation Banner -->
+                    <div class="best-fit-banner" id="bestFitBanner">
+                        <div class="best-fit-icon"><i class="fas fa-magic"></i></div>
+                        <div class="best-fit-content">
+                            <div class="best-fit-title" data-i18n="app.bestFit.tag">🎯 TỰ ĐỘNG ĐỀ XUẤT THIẾT BỊ PHÙ HỢP NHẤT</div>
+                            <div class="best-fit-msg" id="bestFitMsg">
+                                Đang phân tích hàng hóa...
+                            </div>
+                        </div>
+                        <button class="btn-apply-fit" id="btnApplyFit" style="display:none;" data-i18n="app.bestFit.applyBtn">Áp dụng</button>
+                    </div>
+
                     <div class="equipment-grid">
                         <button class="equipment-btn active" data-equipment="20dc">
+                            <span class="badge-rec" data-i18n="app.bestFit.badge">TỐI ƯU</span>
                             <i class="fas fa-box"></i>
                             <span>20' Dry Container</span>
-                            <small>20DC</small>
+                            <small>20DC (33.2 m³)</small>
                         </button>
                         <button class="equipment-btn" data-equipment="40dc">
+                            <span class="badge-rec" data-i18n="app.bestFit.badge">TỐI ƯU</span>
                             <i class="fas fa-box"></i>
                             <span>40' Dry Container</span>
-                            <small>40DC</small>
+                            <small>40DC (67.7 m³)</small>
                         </button>
                         <button class="equipment-btn" data-equipment="40hc">
+                            <span class="badge-rec" data-i18n="app.bestFit.badge">TỐI ƯU</span>
                             <i class="fas fa-box"></i>
                             <span>40' High Cube</span>
-                            <small>40HC</small>
+                            <small>40HC (76.3 m³)</small>
                         </button>
                         <button class="equipment-btn" data-equipment="truck">
+                            <span class="badge-rec" data-i18n="app.bestFit.badge">TỐI ƯU</span>
                             <i class="fas fa-truck"></i>
                             <span data-i18n="app.equipment.truck">Xe tải</span>
-                            <small>Truck</small>
+                            <small>Truck (86.0 m³)</small>
                         </button>
                         <button class="equipment-btn" data-equipment="custom">
                             <i class="fas fa-cog"></i>
@@ -262,6 +289,39 @@
                         </div>
                     </div>
 
+                    <!-- Cargo Table View (Classic view replicate from cbm3.net) -->
+                    <div class="cargo-table-wrap" id="cargoTableView" style="display:none;">
+                        <div class="table-actions-bar">
+                            <button class="tbl-action-btn primary" id="btnAddTableRow"><i class="fas fa-plus"></i> <span data-i18n="app.table.addRow">Thêm dòng hàng hóa</span></button>
+                            <button class="tbl-action-btn secondary" id="btnClearAllCargo"><i class="fas fa-trash-alt"></i> <span data-i18n="app.table.clearAll">Xóa tất cả</span></button>
+                        </div>
+                        <div class="cargo-table-responsive">
+                            <table class="cargo-data-table" id="cargoDataTable">
+                                <thead>
+                                    <tr>
+                                        <th style="width:36px;">#</th>
+                                        <th style="width:48px;" data-i18n="app.table.color">Màu</th>
+                                        <th data-i18n="app.table.name">Tên hàng</th>
+                                        <th data-i18n="app.table.length">D (cm)</th>
+                                        <th data-i18n="app.table.width">R (cm)</th>
+                                        <th data-i18n="app.table.height">C (cm)</th>
+                                        <th data-i18n="app.table.qty">SL</th>
+                                        <th data-i18n="app.table.weight">KL (kg)</th>
+                                        <th data-i18n="app.table.totalWeight">Tổng KL</th>
+                                        <th data-i18n="app.table.cbm">CBM</th>
+                                        <th data-i18n="app.table.stackable">Chồng</th>
+                                        <th data-i18n="app.table.stop">Điểm dỡ</th>
+                                        <th data-i18n="app.table.priority">Ưu tiên</th>
+                                        <th style="width:70px;" data-i18n="app.table.actions">Xóa</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cargoTableBody">
+                                    <!-- Rendered dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <button class="add-cargo-btn" id="addCargoBtn">
                         <i class="fas fa-plus"></i> <span data-i18n="app.cargo.addNew">Thêm hàng hóa mới</span>
                     </button>
@@ -358,6 +418,9 @@
                         <input type="range" id="heightSlider" min="0" max="100" value="100" class="height-slider" disabled>
                         <span id="heightLabel" data-i18n="sim.fullView">Toàn bộ</span>
                     </div>
+                    <div class="control-group">
+                        <button class="ctrl-btn active" id="btnToggleCog" data-i18n="sim.toggleCog" title="Bật/Tắt điểm trọng tâm 3D (CoG)"><i class="fas fa-crosshairs"></i> CoG</button>
+                    </div>
                     <button class="fullscreen-btn" id="fullscreenBtn">
                         <i class="fas fa-expand"></i> <span data-i18n="sim.fullscreen">Toàn màn hình</span>
                     </button>
@@ -366,14 +429,35 @@
                 <!-- 3D Canvas -->
                 <div class="sim-viewport" id="simViewport">
                     <canvas id="simCanvas"></canvas>
+
+                    <!-- Interactive 3D Box Raycast Inspector -->
+                    <div class="box-inspector-card" id="boxInspectorCard" style="display:none;">
+                        <div class="inspector-header">
+                            <span class="inspector-badge" id="inspStep">#1</span>
+                            <strong id="inspName">Thùng hàng A</strong>
+                            <button class="inspector-close" id="btnCloseInspector">&times;</button>
+                        </div>
+                        <div class="inspector-body">
+                            <div class="insp-row"><span>Kích thước:</span> <strong id="inspDims">60 × 50 × 40 cm</strong></div>
+                            <div class="insp-row"><span>Khối lượng:</span> <strong id="inspWeight">15 kg</strong></div>
+                            <div class="insp-row"><span>Vị trí (m):</span> <strong id="inspPos">X: 0.60, Y: 0.40, Z: 0.50</strong></div>
+                            <div class="insp-row"><span>Quy tắc:</span> <strong id="inspRule">Stop 1 • Xếp tự do</strong></div>
+                        </div>
+                    </div>
+
                     <!-- HUD Overlay -->
                     <div class="sim-hud" id="simHud">
-                        <div class="hud-item">
-                            <span class="hud-label">Container 1</span>
+                        <div class="hud-item hud-header-item">
+                            <span class="hud-label" id="hudContainerTitle">Container 1 (20DC)</span>
+                            <span class="hud-status-badge" id="hudStatusBadge">100% Vừa vặn</span>
                         </div>
                         <div class="hud-item">
                             <span class="hud-label" data-i18n="sim.hud.placed">Đã xếp:</span>
-                            <span class="hud-value" id="hudPlaced">0</span>
+                            <span class="hud-value" id="hudPlaced">0 / 0</span>
+                        </div>
+                        <div class="hud-item" id="hudUnplacedRow" style="display:none;">
+                            <span class="hud-label" data-i18n="sim.hud.unplaced" style="color:#ef4444;">Chưa xếp:</span>
+                            <span class="hud-value" id="hudUnplaced" style="color:#ef4444;font-weight:800;">0</span>
                         </div>
                         <div class="hud-item">
                             <span class="hud-label" data-i18n="sim.hud.volume">Thể tích:</span>
@@ -384,8 +468,12 @@
                             <span class="hud-value" id="hudWeight">0 kg</span>
                         </div>
                         <div class="hud-item">
-                            <span class="hud-label" data-i18n="sim.hud.utilization">Sử dụng:</span>
+                            <span class="hud-label" data-i18n="sim.hud.utilization">Lấp đầy:</span>
                             <span class="hud-value hud-green" id="hudUtil">0%</span>
+                        </div>
+                        <div class="hud-item">
+                            <span class="hud-label" data-i18n="sim.hud.cog">Trọng tâm:</span>
+                            <span class="hud-value" id="hudCog" style="color:var(--teal);">Cân đối</span>
                         </div>
                     </div>
                     <!-- Loading Overlay -->
@@ -396,28 +484,68 @@
                     </div>
                 </div>
 
+                <!-- Step-by-Step 3D Loading Sequence Playback Bar -->
+                <div class="sim-playback-bar" id="simPlaybackBar">
+                    <div class="playback-controls">
+                        <button class="playback-btn" id="btnStepFirst" title="Về bước đầu (First)"><i class="fas fa-backward-step"></i></button>
+                        <button class="playback-btn" id="btnStepPrev" title="Bước trước (Previous)"><i class="fas fa-step-backward"></i></button>
+                        <button class="playback-btn primary-playback" id="btnPlayPause" title="Phát diễn hoạt / Tạm dừng"><i class="fas fa-play" id="playPauseIcon"></i></button>
+                        <button class="playback-btn" id="btnStepNext" title="Bước tiếp (Next)"><i class="fas fa-step-forward"></i></button>
+                        <button class="playback-btn" id="btnStepLast" title="Bước cuối (Last)"><i class="fas fa-forward-step"></i></button>
+                    </div>
+                    <div class="playback-timeline">
+                        <div class="timeline-meta">
+                            <span class="timeline-step-label"><strong data-i18n="sim.playback.step">Tiến trình xếp:</strong> <span id="playbackCurrentStep">0</span> / <span id="playbackTotalSteps">0</span> kiện</span>
+                            <span class="timeline-cargo-name" id="playbackCargoName">Sẵn sàng mô phỏng</span>
+                        </div>
+                        <input type="range" class="playback-slider" id="playbackSlider" min="0" max="0" value="0">
+                    </div>
+                    <div class="playback-speed">
+                        <span class="speed-label" data-i18n="sim.playback.speed">Tốc độ:</span>
+                        <button class="speed-btn active" data-speed="1">1x</button>
+                        <button class="speed-btn" data-speed="2">2x</button>
+                        <button class="speed-btn" data-speed="4">4x</button>
+                    </div>
+                </div>
+
                 <p class="sim-note" data-i18n="sim.note">Hình dạng bên ngoài thiết bị chỉ mang tính minh họa. Trong chế độ xem thực tế, các bức tường gần sẽ ẩn để hiển thị hàng hóa; kích thước và quy tắc xếp hàng không thay đổi.</p>
 
                 <!-- Results -->
                 <div class="sim-results" id="simResults" style="display:none;">
                     <div class="result-card">
-                        <h4>Container 1</h4>
+                        <h4 id="resultContainerHeader">Container 1 - Kết quả tải trọng & xếp dỡ</h4>
                         <table class="result-table">
                             <tr>
                                 <td data-i18n="sim.result.placed">Kiện hàng đã xếp</td>
-                                <td class="result-value" id="resultPlaced">100</td>
+                                <td class="result-value" id="resultPlaced">100 / 100</td>
+                            </tr>
+                            <tr id="resultUnplacedRow" style="display:none;">
+                                <td data-i18n="sim.result.unplaced" style="color:#ef4444;font-weight:700;">Kiện chưa xếp (vượt tải)</td>
+                                <td class="result-value" id="resultUnplaced" style="color:#ef4444;font-weight:800;">0</td>
                             </tr>
                             <tr>
-                                <td data-i18n="sim.result.volume">Thể tích hàng</td>
+                                <td data-i18n="sim.result.volume">Thể tích hàng hóa</td>
                                 <td class="result-value" id="resultVolume">12.000 m³</td>
                             </tr>
                             <tr>
-                                <td data-i18n="sim.result.mass">Tổng khối lượng</td>
+                                <td data-i18n="sim.result.capacity">Sức chứa Container</td>
+                                <td class="result-value" id="resultCapacity">33.2 m³</td>
+                            </tr>
+                            <tr>
+                                <td data-i18n="sim.result.mass">Tổng khối lượng hàng</td>
                                 <td class="result-value" id="resultMass">1,500.0 kg</td>
                             </tr>
                             <tr>
-                                <td data-i18n="sim.result.utilization">Tỉ lệ sử dụng</td>
-                                <td class="result-value result-highlight" id="resultUtil">78.5%</td>
+                                <td data-i18n="sim.result.payload">Tải trọng tối đa cho phép</td>
+                                <td class="result-value" id="resultPayload">28,200 kg</td>
+                            </tr>
+                            <tr>
+                                <td data-i18n="sim.result.utilization">Tỉ lệ lấp đầy thể tích</td>
+                                <td class="result-value result-highlight" id="resultUtil">36.1%</td>
+                            </tr>
+                            <tr>
+                                <td data-i18n="sim.result.cog">Đánh giá trọng tâm (CoG)</td>
+                                <td class="result-value" id="resultCog" style="color:var(--teal);">Cân đối ở tâm</td>
                             </tr>
                         </table>
                     </div>
@@ -426,42 +554,119 @@
         </div>
     </section>
 
-    <!-- CBM Calculator (simple) -->
+    <!-- CBM Calculator (Multi-line & Unit conversion) -->
     <section class="cbm-section" id="cbmCalc" style="display:none;">
         <div class="container">
             <div class="app-card">
-                <h3 data-i18n="cbm.title"><i class="fas fa-calculator"></i> Máy tính CBM (Thể tích khối)</h3>
-                <p class="section-desc" data-i18n="cbm.desc">Tính nhanh thể tích CBM cho lô hàng của bạn.</p>
-                <div class="cbm-form">
-                    <div class="cbm-row">
-                        <div class="cbm-input">
-                            <label data-i18n="cbm.width">Rộng (cm)</label>
-                            <input type="number" id="cbmWidth" value="50">
-                        </div>
-                        <div class="cbm-input">
-                            <label data-i18n="cbm.length">Dài (cm)</label>
-                            <input type="number" id="cbmLength" value="60">
-                        </div>
-                        <div class="cbm-input">
-                            <label data-i18n="cbm.height">Cao (cm)</label>
-                            <input type="number" id="cbmHeight" value="40">
-                        </div>
-                        <div class="cbm-input">
-                            <label data-i18n="cbm.qty">Số lượng</label>
-                            <input type="number" id="cbmQty" value="1">
-                        </div>
+                <div class="cbm-calc-header">
+                    <div>
+                        <h3 data-i18n="cbm.title"><i class="fas fa-calculator"></i> Máy tính CBM (Thể tích khối & Trọng lượng tính cước)</h3>
+                        <p class="section-desc" data-i18n="cbm.desc">Tính thể tích CBM, CFT, Trọng lượng tính cước (W/M) và ước lượng số kiện xếp vừa từng loại Container.</p>
                     </div>
-                    <button class="btn-primary" id="cbmCalcBtn" data-i18n="cbm.calculate">
-                        <i class="fas fa-calculator"></i> Tính CBM
-                    </button>
-                    <div class="cbm-result" id="cbmResult">
-                        <div class="cbm-result-item">
-                            <label data-i18n="cbm.perUnit">CBM mỗi kiện</label>
-                            <strong id="cbmPerUnit">0.120 m³</strong>
+                    <div class="cbm-unit-toggle">
+                        <button class="unit-btn active" data-unit="metric">Hệ Mét (cm, kg, m³)</button>
+                        <button class="unit-btn" data-unit="imperial">Hệ Anh (inch, lbs, CFT)</button>
+                    </div>
+                </div>
+
+                <div class="cbm-table-container">
+                    <table class="cbm-table" id="cbmMultiTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th data-i18n="cbm.col.name">Tên mặt hàng</th>
+                                <th data-i18n="cbm.col.length" id="thDimL">Dài (cm)</th>
+                                <th data-i18n="cbm.col.width" id="thDimW">Rộng (cm)</th>
+                                <th data-i18n="cbm.col.height" id="thDimH">Cao (cm)</th>
+                                <th data-i18n="cbm.col.qty">Số lượng</th>
+                                <th data-i18n="cbm.col.weight" id="thDimWt">Đơn trọng (kg)</th>
+                                <th>CBM / Kiện</th>
+                                <th>Tổng CBM</th>
+                                <th>Tổng KL</th>
+                                <th style="width:50px;">Xóa</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cbmTableBody">
+                            <tr>
+                                <td>1</td>
+                                <td><input type="text" class="cbm-row-name" value="Kiện hàng A"></td>
+                                <td><input type="number" class="cbm-row-l" value="60" min="1"></td>
+                                <td><input type="number" class="cbm-row-w" value="50" min="1"></td>
+                                <td><input type="number" class="cbm-row-h" value="40" min="1"></td>
+                                <td><input type="number" class="cbm-row-q" value="50" min="1"></td>
+                                <td><input type="number" class="cbm-row-wt" value="15" min="0"></td>
+                                <td class="cbm-unit-val">0.120 m³</td>
+                                <td class="cbm-total-val">6.000 m³</td>
+                                <td class="cbm-total-wt">750 kg</td>
+                                <td><button class="btn-del-cbm-row"><i class="fas fa-times"></i></button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="cbm-table-actions">
+                        <button class="btn-secondary" id="btnAddCbmRow"><i class="fas fa-plus"></i> <span data-i18n="cbm.addRow">Thêm kiện hàng</span></button>
+                        <button class="btn-primary" id="btnSyncCbmToSim"><i class="fas fa-arrow-right"></i> <span data-i18n="cbm.sendToSim">Chuyển sang Xếp hàng 3D</span></button>
+                    </div>
+                </div>
+
+                <!-- CBM Results Cards -->
+                <div class="cbm-metrics-grid">
+                    <div class="cbm-metric-card">
+                        <span class="cbm-card-label" data-i18n="cbm.metric.totalCbm">TỔNG THỂ TÍCH (CBM)</span>
+                        <strong class="cbm-metric-val" id="cbmTotalVolume">6.000 m³</strong>
+                        <small id="cbmTotalCft">211.89 CFT</small>
+                    </div>
+                    <div class="cbm-metric-card">
+                        <span class="cbm-card-label" data-i18n="cbm.metric.totalGross">TỔNG TRỌNG LƯỢNG (GROSS)</span>
+                        <strong class="cbm-metric-val" id="cbmTotalGross">750.0 kg</strong>
+                        <small id="cbmTotalLbs">1,653.5 lbs</small>
+                    </div>
+                    <div class="cbm-metric-card highlight">
+                        <span class="cbm-card-label" data-i18n="cbm.metric.freightTon">TRỌNG LƯỢNG TÍNH CƯỚC (W/M)</span>
+                        <strong class="cbm-metric-val" id="cbmFreightTon">6.00 FT (CBM)</strong>
+                        <small>Vận tải biển: Max(CBM, Tấn)</small>
+                    </div>
+                    <div class="cbm-metric-card">
+                        <span class="cbm-card-label" data-i18n="cbm.metric.airWeight">TL THỂ TÍCH HÀNG KHÔNG</span>
+                        <strong class="cbm-metric-val" id="cbmAirWeight">1,000.0 kg</strong>
+                        <small>Hàng không (1:6000)</small>
+                    </div>
+                </div>
+
+                <!-- Container Capacity Comparison Grid -->
+                <div class="cbm-compare-section">
+                    <h4 data-i18n="cbm.compare.title"><i class="fas fa-ship"></i> Ước tính sức chứa trên các loại Container chuẩn</h4>
+                    <div class="cbm-compare-grid">
+                        <div class="compare-card">
+                            <span class="compare-title">20' Dry Container (20DC)</span>
+                            <div class="compare-cap">33.2 m³ / 28,200 kg</div>
+                            <div class="compare-bar-wrap">
+                                <div class="compare-bar" id="bar20dc" style="width: 18%;"></div>
+                            </div>
+                            <div class="compare-stat" id="stat20dc">Chiếm ~18.1% dung tích</div>
                         </div>
-                        <div class="cbm-result-item">
-                            <label data-i18n="cbm.total">Tổng CBM</label>
-                            <strong id="cbmTotal">0.120 m³</strong>
+                        <div class="compare-card">
+                            <span class="compare-title">40' Dry Container (40DC)</span>
+                            <div class="compare-cap">67.7 m³ / 26,680 kg</div>
+                            <div class="compare-bar-wrap">
+                                <div class="compare-bar" id="bar40dc" style="width: 8.8%;"></div>
+                            </div>
+                            <div class="compare-stat" id="stat40dc">Chiếm ~8.9% dung tích</div>
+                        </div>
+                        <div class="compare-card">
+                            <span class="compare-title">40' High Cube (40HC)</span>
+                            <div class="compare-cap">76.3 m³ / 26,460 kg</div>
+                            <div class="compare-bar-wrap">
+                                <div class="compare-bar" id="bar40hc" style="width: 7.8%;"></div>
+                            </div>
+                            <div class="compare-stat" id="stat40hc">Chiếm ~7.9% dung tích</div>
+                        </div>
+                        <div class="compare-card">
+                            <span class="compare-title">Xe tải 13.6m / Truck</span>
+                            <div class="compare-cap">86.0 m³ / 24,000 kg</div>
+                            <div class="compare-bar-wrap">
+                                <div class="compare-bar" id="barTruck" style="width: 6.9%;"></div>
+                            </div>
+                            <div class="compare-stat" id="statTruck">Chiếm ~7.0% dung tích</div>
                         </div>
                     </div>
                 </div>
@@ -590,6 +795,107 @@
         </div>
     </footer>
 
+    <!-- Loading Manifest & Stowage Plan Modal -->
+    <div class="modal-backdrop" id="summaryModal" style="display:none;">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <div class="modal-badge"><i class="fas fa-ship"></i> TNG LOGISTICS GLOBAL</div>
+                    <h2>BẢNG KÊ ĐÓNG HÀNG & PHIẾU XẾP DỠ CONTAINER</h2>
+                    <p class="modal-subtitle">Container Loading Manifest & Stowage Plan • Phụ trách: <strong>hieutrung@tng.vn</strong></p>
+                </div>
+                <button class="modal-close" id="btnCloseSummaryModal">&times;</button>
+            </div>
+            <div class="modal-body" id="modalPrintArea">
+                <!-- Job Metadata -->
+                <div class="manifest-meta-grid">
+                    <div class="manifest-meta-item">
+                        <span class="meta-label">MÃ PHIẾU / JOB ID</span>
+                        <strong id="modalJobId">TNG-STOW-202611</strong>
+                    </div>
+                    <div class="manifest-meta-item">
+                        <span class="meta-label">THIẾT BỊ VẬN CHUYỂN</span>
+                        <strong id="modalEquipmentName">20' Dry Container (20DC)</strong>
+                    </div>
+                    <div class="manifest-meta-item">
+                        <span class="meta-label">NGÀY LẬP</span>
+                        <strong id="modalCreatedDate">22/11/2026</strong>
+                    </div>
+                    <div class="manifest-meta-item">
+                        <span class="meta-label">CHUYÊN VIÊN PHỤ TRÁCH</span>
+                        <strong style="color:var(--primary);">hieutrung@tng.vn</strong>
+                    </div>
+                </div>
+
+                <!-- Key Metrics Cards -->
+                <div class="manifest-stats-row">
+                    <div class="stat-box">
+                        <span class="stat-title">TỔNG THỂ TÍCH (CBM)</span>
+                        <div class="stat-val" id="modalTotalCbm">0.000 m³</div>
+                        <small id="modalTotalCft">0.0 CFT</small>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-title">TỔNG KHỐI LƯỢNG (GROSS)</span>
+                        <div class="stat-val" id="modalTotalWeight">0 kg</div>
+                        <small id="modalMaxPayload">Max: 28,200 kg</small>
+                    </div>
+                    <div class="stat-box highlight">
+                        <span class="stat-title">TRỌNG LƯỢNG TÍNH CƯỚC (W/M)</span>
+                        <div class="stat-val" id="modalFreightTon">0.00 FT</div>
+                        <small>MAX(CBM, Tấn thực tế)</small>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-title">TL THỂ TÍCH HÀNG KHÔNG</span>
+                        <div class="stat-val" id="modalAirVolWeight">0 kg</div>
+                        <small>Chuẩn IATA 1:6000</small>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-title">TỈ LỆ LẤP ĐẦY</span>
+                        <div class="stat-val text-green" id="modalUtilPercent">0%</div>
+                        <small id="modalCogEval">Trọng tâm: Cân đối</small>
+                    </div>
+                </div>
+
+                <!-- Cargo Manifest Items Table -->
+                <div class="manifest-table-wrap">
+                    <h4><i class="fas fa-list-ol"></i> CHI TIẾT TỪNG MẶT HÀNG BỐC DỠ</h4>
+                    <table class="manifest-table">
+                        <thead>
+                            <tr>
+                                <th>STT</th>
+                                <th>Tên kiện hàng</th>
+                                <th>Kích thước (D x R x C cm)</th>
+                                <th>SL Đã xếp / Yêu cầu</th>
+                                <th>Đơn trọng (kg)</th>
+                                <th>Tổng KL (kg)</th>
+                                <th>Tổng CBM (m³)</th>
+                                <th>Quy tắc dỡ (Stop)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modalManifestTableBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="manifest-signatures">
+                    <div class="signature-box">
+                        <span>Đại diện Chủ hàng / Shipper</span>
+                        <div class="sig-line"></div>
+                        <small>(Ký và ghi rõ họ tên)</small>
+                    </div>
+                    <div class="signature-box">
+                        <span>Chuyên viên TNG Logistics</span>
+                        <div class="sig-line"></div>
+                        <small>hieutrung@tng.vn</small>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="btnModalExport"><i class="fas fa-file-excel"></i> Xuất Excel</button>
+                <button class="btn-primary" id="btnModalPrint"><i class="fas fa-print"></i> In phiếu đóng hàng / PDF</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Sticky Action Bar -->
     <div class="sticky-bar" id="stickyBar">
         <button class="sticky-btn primary" id="planBtn">
@@ -601,6 +907,7 @@
     </div>
 
     <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="i18n.js"></script>

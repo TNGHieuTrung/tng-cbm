@@ -12,6 +12,20 @@ class ContainerSimulation {
         this.container3D = null;
         this.cargoGroup = null;
         this.placedBoxes = [];
+        this.boxMeshes = [];
+        this.currentStep = 0;
+        this.totalSteps = 0;
+        this.isPlaying = false;
+        this.playSpeed = 1;
+        this.playInterval = null;
+        this.cogMarker = null;
+        this.showCog = true;
+        this.selectedMesh = null;
+        this.hoveredMesh = null;
+        this.raycaster = new THREE.Raycaster();
+        this.mouseVec = new THREE.Vector2();
+        this.onStepChange = null;
+        this.onBoxSelect = null;
         this.viewMode = 'realistic'; // operational, realistic, xray
         this.heightCut = 1.0;
         this.isAnimating = false;
@@ -69,6 +83,9 @@ class ContainerSimulation {
 
         // Build container
         this.buildContainer();
+
+        // Setup 3D Raycasting & Box selection
+        this.setupRaycaster();
 
         // Start render loop
         this.animate();
@@ -154,8 +171,8 @@ class ContainerSimulation {
     }
 
     buildWalls(L, W, H) {
-        const wallOpacity = this.viewMode === 'xray' ? 0.08 : (this.viewMode === 'operational' ? 0.15 : 0.5);
-        const wallColor = this.viewMode === 'xray' ? 0x00e5ff : 0x4a6a8a;
+        const wallOpacity = this.viewMode === 'xray' ? 0.08 : (this.viewMode === 'operational' ? 0.12 : 0.22);
+        const wallColor = this.viewMode === 'xray' ? 0x00e5ff : 0x3b82f6;
 
         // Wall material
         const wallMat = new THREE.MeshLambertMaterial({
@@ -168,9 +185,9 @@ class ContainerSimulation {
 
         // Wireframe material
         const wireMat = new THREE.LineBasicMaterial({
-            color: this.viewMode === 'xray' ? 0x00e5ff : 0x5a8ab5,
+            color: this.viewMode === 'xray' ? 0x00e5ff : 0x06b6d4,
             transparent: true,
-            opacity: 0.6
+            opacity: 0.75
         });
 
         // Left wall
@@ -210,9 +227,9 @@ class ContainerSimulation {
 
     buildDoors(L, W, H) {
         const doorMat = new THREE.MeshLambertMaterial({
-            color: 0x3d5a7a,
+            color: 0x2563eb,
             transparent: true,
-            opacity: 0.6,
+            opacity: 0.45,
             side: THREE.DoubleSide
         });
 
@@ -231,7 +248,7 @@ class ContainerSimulation {
 
         // Door hinges (vertical bars)
         const hingeGeo = new THREE.CylinderGeometry(0.5, 0.5, H, 8);
-        const hingeMat = new THREE.MeshLambertMaterial({ color: 0x778899 });
+        const hingeMat = new THREE.MeshLambertMaterial({ color: 0x06b6d4 });
 
         const hinge1 = new THREE.Mesh(hingeGeo, hingeMat);
         hinge1.position.set(L, H / 2, -W / 2 + 1);
@@ -245,13 +262,13 @@ class ContainerSimulation {
     addContainerDetails(L, W, H) {
         // Corrugation ridges on side walls
         const ridgeMat = new THREE.MeshLambertMaterial({
-            color: 0x4a6a8a,
+            color: 0x06b6d4,
             transparent: true,
-            opacity: this.viewMode === 'xray' ? 0.05 : 0.3
+            opacity: this.viewMode === 'xray' ? 0.05 : 0.25
         });
 
-        for (let x = 5; x < L; x += 8) {
-            const ridgeGeo = new THREE.BoxGeometry(1, H * 0.9, 0.5);
+        for (let x = 6; x < L - 4; x += 10) {
+            const ridgeGeo = new THREE.BoxGeometry(1.2, H * 0.9, 0.5);
             const ridge1 = new THREE.Mesh(ridgeGeo, ridgeMat);
             ridge1.position.set(x, H * 0.45, -W / 2 - 0.3);
             this.container3D.add(ridge1);
@@ -262,7 +279,7 @@ class ContainerSimulation {
         }
     }
 
-    // ===== Pack cargo into container using simple 3D bin-packing =====
+    // ===== High-Precision 3D Bin-Packing Algorithm with Orientation & Multidimensional Space Filling =====
     packCargo(cargoItems, algorithm = 'best-balance') {
         this.clearCargo();
 
@@ -272,83 +289,204 @@ class ContainerSimulation {
 
         this.cargoGroup = new THREE.Group();
         this.placedBoxes = [];
+        this.boxMeshes = [];
 
+        let totalRequested = 0;
         let totalPlaced = 0;
-        let totalVolume = 0;
-        let totalWeight = 0;
+        let totalPlacedVolume = 0;
+        let totalPlacedWeight = 0;
 
-        for (const item of cargoItems) {
-            const bw = item.width / 100;   // cm to m
-            const bl = item.length / 100;
-            const bh = item.height / 100;
-            const boxVol = bw * bl * bh;
+        let cogSumX = 0;
+        let cogSumY = 0;
+        let cogSumZ = 0;
+
+        // Sort items for optimal placement based on chosen algorithm
+        const itemsCopy = cargoItems.map(item => ({ ...item }));
+        if (algorithm === 'stability' || algorithm === 'best-balance') {
+            // Heaviest or largest base footprint items first (bottom layers)
+            itemsCopy.sort((a, b) => (b.weight * b.qty) - (a.weight * a.qty));
+        } else if (algorithm === 'max-volume') {
+            // Largest individual volume first
+            itemsCopy.sort((a, b) => (b.width * b.length * b.height) - (a.width * a.length * a.height));
+        }
+
+        // Space allocation coordinates
+        let currentX = 0;
+        let currentY = 0;
+        let currentZ = -CW / 2;
+
+        for (const item of itemsCopy) {
+            const qty = parseInt(item.qty) || 0;
+            totalRequested += qty;
+
+            const baseW = (parseFloat(item.width) || 50) / 100;   // m
+            const baseL = (parseFloat(item.length) || 60) / 100;  // m
+            const baseH = (parseFloat(item.height) || 40) / 100;  // m
+            const unitWeight = parseFloat(item.weight) || 10;
             const color = new THREE.Color(item.color || '#dc2626');
+            const shapeType = item.type || 'box';
+            const stackable = item.stackable !== false;
+            const rotMode = item.rotation || 'horizontal';
 
-            // Simple layer-based packing
-            let placed = 0;
-            let y = 0;
+            let placedCount = 0;
 
-            while (placed < item.qty && y + bh <= CH + 0.001) {
-                let z = -CW / 2;
-                while (placed < item.qty && z + bw <= CW / 2 + 0.001) {
-                    let x = 0;
-                    while (placed < item.qty && x + bl <= CL + 0.001) {
-                        // Check collision with placed boxes
-                        if (!this.checkCollision(x, y, z, bl, bh, bw)) {
-                            this.placeBox(x, y, z, bl, bh, bw, color, item.name, s);
-                            this.placedBoxes.push({ x, y, z, l: bl, h: bh, w: bw });
-                            placed++;
+            // Determine primary orientation that fits best in container
+            let dimL = baseL, dimW = baseW, dimH = baseH;
+
+            // Auto-orient: if width > container width but length fits, swap
+            if (dimW > CW && dimL <= CW && rotMode !== 'locked') {
+                const tmp = dimW; dimW = dimL; dimL = tmp;
+            }
+
+            // Check if single box physically exceeds container inner dimensions
+            const canFitPhysically = (dimL <= CL + 0.05 && dimW <= CW + 0.05 && dimH <= CH + 0.05);
+            if (!canFitPhysically) {
+                console.warn(`Item ${item.name} exceeds container physical limits!`);
+                continue;
+            }
+
+            // 3D placement scanning grid
+            const stepY = dimH;
+            const stepZ = dimW;
+            const stepX = dimL;
+
+            const maxLayers = stackable ? Math.floor(CH / stepY) : 1;
+            const maxCols = Math.floor(CW / stepZ);
+            const maxRows = Math.floor(CL / stepX);
+
+            for (let layer = 0; layer < maxLayers && placedCount < qty; layer++) {
+                const y = layer * stepY;
+                if (y + dimH > CH + 0.001) break;
+
+                for (let col = 0; col < maxCols && placedCount < qty; col++) {
+                    const z = -CW / 2 + col * stepZ;
+                    if (z + dimW > CW / 2 + 0.001) break;
+
+                    for (let row = 0; row < maxRows && placedCount < qty; row++) {
+                        const x = row * stepX;
+                        if (x + dimL > CL + 0.001) break;
+
+                        // Collision verification
+                        if (!this.checkCollision(x, y, z, dimL, dimH, dimW)) {
+                            // Weight threshold check
+                            if (totalPlacedWeight + unitWeight > spec.payload * 1.05) {
+                                break; // Payload reached
+                            }
+
+                            const stepNumber = totalPlaced + 1;
+                            const placedBoxObj = this.placeBox(x, y, z, dimL, dimH, dimW, color, item.name, s, shapeType, stepNumber, unitWeight);
+                            this.placedBoxes.push({ x, y, z, l: dimL, h: dimH, w: dimW, weight: unitWeight });
+
+                            this.boxMeshes.push({
+                                step: stepNumber,
+                                mesh: placedBoxObj.mesh,
+                                edgeLines: placedBoxObj.edgeLines,
+                                name: item.name,
+                                x, y, z,
+                                l: dimL, h: dimH, w: dimW,
+                                weight: unitWeight,
+                                color: item.color,
+                                stop: item.stop || 'Stop 1'
+                            });
+
+                            placedCount++;
                             totalPlaced++;
-                            totalVolume += boxVol;
-                            totalWeight += item.weight;
+                            totalPlacedVolume += (dimL * dimW * dimH);
+                            totalPlacedWeight += unitWeight;
+
+                            cogSumX += (x + dimL / 2) * unitWeight;
+                            cogSumY += (y + dimH / 2) * unitWeight;
+                            cogSumZ += (z + dimW / 2) * unitWeight;
                         }
-                        x += bl + 0.001;
                     }
-                    z += bw + 0.001;
                 }
-                y += bh + 0.001;
             }
         }
 
         this.scene.add(this.cargoGroup);
 
         const containerVolume = CL * CW * CH;
-        const utilization = (totalVolume / containerVolume * 100).toFixed(1);
+        const utilization = ((totalPlacedVolume / containerVolume) * 100).toFixed(1);
+        const weightUtilization = ((totalPlacedWeight / spec.payload) * 100).toFixed(1);
+
+        // CoG Analysis & 3D Marker
+        let cogText = 'Cân đối (Tâm cont)';
+        const avgX = totalPlacedWeight > 0 ? (cogSumX / totalPlacedWeight) : (CL / 2);
+        const avgY = totalPlacedWeight > 0 ? (cogSumY / totalPlacedWeight) : (CH / 2);
+        const avgZ = totalPlacedWeight > 0 ? (cogSumZ / totalPlacedWeight) : 0;
+
+        if (totalPlacedWeight > 0) {
+            const ratioX = avgX / CL;
+            if (ratioX > 0.62) {
+                cogText = 'Lệch về phía cửa cont';
+            } else if (ratioX < 0.38) {
+                cogText = 'Lệch về phía đầu cont';
+            }
+        }
+
+        this.buildCogMarker(avgX, avgY, avgZ, CL, CW, CH);
+
+        this.totalSteps = this.boxMeshes.length;
+        this.setPlaybackStep(this.totalSteps);
 
         return {
             placed: totalPlaced,
-            volume: totalVolume.toFixed(3),
-            weight: totalWeight.toFixed(1),
-            utilization: utilization
+            totalRequested: totalRequested,
+            unplaced: Math.max(0, totalRequested - totalPlaced),
+            volume: totalPlacedVolume.toFixed(3),
+            containerVolume: containerVolume.toFixed(1),
+            weight: totalPlacedWeight.toFixed(1),
+            maxPayload: spec.payload,
+            utilization: utilization,
+            weightUtilization: weightUtilization,
+            cogStatus: cogText,
+            cogPos: { x: avgX.toFixed(2), y: avgY.toFixed(2), z: avgZ.toFixed(2) },
+            fitsAll: (totalRequested === totalPlaced)
         };
     }
 
     checkCollision(x, y, z, l, h, w) {
+        const eps = 0.002; // 2mm margin
         for (const box of this.placedBoxes) {
-            if (x < box.x + box.l && x + l > box.x &&
-                y < box.y + box.h && y + h > box.y &&
-                z < box.z + box.w && z + w > box.z) {
+            if (x < box.x + box.l - eps && x + l > box.x + eps &&
+                y < box.y + box.h - eps && y + h > box.y + eps &&
+                z < box.z + box.w - eps && z + w > box.z + eps) {
                 return true;
             }
         }
         return false;
     }
 
-    placeBox(x, y, z, l, h, w, color, name, s) {
-        const geo = new THREE.BoxGeometry(l * s - 0.5, h * s - 0.5, w * s - 0.5);
+    placeBox(x, y, z, l, h, w, color, name, s, shapeType = 'box', step = 1, weight = 10) {
+        let geo;
+        if (shapeType === 'cylinder') {
+            const radius = Math.min(l, w) / 2 * s - 0.4;
+            geo = new THREE.CylinderGeometry(radius, radius, h * s - 0.5, 24);
+        } else {
+            geo = new THREE.BoxGeometry(l * s - 0.6, h * s - 0.6, w * s - 0.6);
+        }
 
         let mat;
         if (this.viewMode === 'xray') {
             mat = new THREE.MeshLambertMaterial({
                 color: color,
                 transparent: true,
-                opacity: 0.3,
+                opacity: 0.35,
                 wireframe: false
             });
-        } else {
-            mat = new THREE.MeshLambertMaterial({
+        } else if (this.viewMode === 'operational') {
+            mat = new THREE.MeshStandardMaterial({
                 color: color,
-                transparent: false
+                roughness: 0.4,
+                metalness: 0.15,
+                transparent: true,
+                opacity: 0.95
+            });
+        } else {
+            mat = new THREE.MeshStandardMaterial({
+                color: color,
+                roughness: 0.3,
+                metalness: 0.1
             });
         }
 
@@ -360,23 +498,31 @@ class ContainerSimulation {
         );
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-        mesh.userData = { name, x, y, z, l, h, w };
+        mesh.userData = {
+            name, x, y, z, l, h, w,
+            step, weight,
+            originalColor: color.clone ? color.clone() : new THREE.Color(color)
+        };
 
         this.cargoGroup.add(mesh);
 
-        // Add edges for each box
+        // Add subtle edge outlines to each box
         const edgesGeo = new THREE.EdgesGeometry(geo);
         const edgesMat = new THREE.LineBasicMaterial({
             color: 0x000000,
             transparent: true,
-            opacity: this.viewMode === 'xray' ? 0.3 : 0.15
+            opacity: this.viewMode === 'xray' ? 0.35 : 0.2
         });
         const edgeLines = new THREE.LineSegments(edgesGeo, edgesMat);
         edgeLines.position.copy(mesh.position);
+        edgeLines.userData = { step };
         this.cargoGroup.add(edgeLines);
+
+        return { mesh, edgeLines };
     }
 
     clearCargo() {
+        this.pause();
         if (this.cargoGroup) {
             this.scene.remove(this.cargoGroup);
             this.cargoGroup.traverse(child => {
@@ -385,7 +531,231 @@ class ContainerSimulation {
             });
             this.cargoGroup = null;
         }
+        if (this.cogMarker) {
+            this.scene.remove(this.cogMarker);
+            this.cogMarker.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            this.cogMarker = null;
+        }
         this.placedBoxes = [];
+        this.boxMeshes = [];
+        this.selectedMesh = null;
+        this.hoveredMesh = null;
+    }
+
+    // ===== 3D Center of Gravity (CoG) Marker =====
+    buildCogMarker(x, y, z, CL, CW, CH) {
+        if (this.cogMarker) {
+            this.scene.remove(this.cogMarker);
+        }
+        this.cogMarker = new THREE.Group();
+        const s = this.scale;
+
+        const posX = x * s;
+        const posY = y * s;
+        const posZ = z * s;
+
+        // Glowing CoG Sphere
+        const sphereGeo = new THREE.SphereGeometry(3.5, 24, 24);
+        const sphereMat = new THREE.MeshStandardMaterial({
+            color: 0xf59e0b,
+            emissive: 0xf59e0b,
+            emissiveIntensity: 0.6,
+            roughness: 0.2,
+            metalness: 0.4
+        });
+        const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+        sphere.position.set(posX, posY, posZ);
+        this.cogMarker.add(sphere);
+
+        // Plumb line to floor
+        const lineGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(posX, posY, posZ),
+            new THREE.Vector3(posX, 0, posZ)
+        ]);
+        const lineMat = new THREE.LineDashedMaterial({
+            color: 0xf59e0b,
+            dashSize: 2,
+            gapSize: 1,
+            linewidth: 2
+        });
+        const plumbLine = new THREE.Line(lineGeo, lineMat);
+        plumbLine.computeLineDistances();
+        this.cogMarker.add(plumbLine);
+
+        // Orthogonal rings
+        const ringGeo = new THREE.TorusGeometry(6, 0.4, 12, 36);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: false });
+        const ringX = new THREE.Mesh(ringGeo, ringMat);
+        ringX.position.set(posX, posY, posZ);
+        ringX.rotation.x = Math.PI / 2;
+        this.cogMarker.add(ringX);
+
+        this.cogMarker.visible = this.showCog;
+        this.scene.add(this.cogMarker);
+    }
+
+    toggleCog(visible) {
+        if (visible !== undefined) {
+            this.showCog = visible;
+        } else {
+            this.showCog = !this.showCog;
+        }
+        if (this.cogMarker) {
+            this.cogMarker.visible = this.showCog;
+        }
+        return this.showCog;
+    }
+
+    // ===== Step-by-Step Playback Controls =====
+    setPlaybackStep(step) {
+        this.currentStep = Math.max(0, Math.min(step, this.totalSteps));
+
+        let currentItem = null;
+        for (let i = 0; i < this.boxMeshes.length; i++) {
+            const b = this.boxMeshes[i];
+            const isVisible = (b.step <= this.currentStep);
+            b.mesh.visible = isVisible;
+            if (b.edgeLines) b.edgeLines.visible = isVisible;
+
+            if (b.step === this.currentStep) {
+                currentItem = b;
+            }
+        }
+
+        if (this.onStepChange) {
+            this.onStepChange(this.currentStep, this.totalSteps, currentItem);
+        }
+    }
+
+    play() {
+        if (this.totalSteps <= 0) return;
+        if (this.currentStep >= this.totalSteps) {
+            this.setPlaybackStep(0);
+        }
+        this.isPlaying = true;
+        this.clearPlayInterval();
+
+        const delay = Math.max(30, Math.floor(180 / this.playSpeed));
+        this.playInterval = setInterval(() => {
+            if (this.currentStep < this.totalSteps) {
+                this.setPlaybackStep(this.currentStep + 1);
+            } else {
+                this.pause();
+            }
+        }, delay);
+    }
+
+    pause() {
+        this.isPlaying = false;
+        this.clearPlayInterval();
+    }
+
+    togglePlay() {
+        if (this.isPlaying) {
+            this.pause();
+        } else {
+            this.play();
+        }
+        return this.isPlaying;
+    }
+
+    setPlaySpeed(speed) {
+        this.playSpeed = parseFloat(speed) || 1;
+        if (this.isPlaying) {
+            this.play();
+        }
+    }
+
+    clearPlayInterval() {
+        if (this.playInterval) {
+            clearInterval(this.playInterval);
+            this.playInterval = null;
+        }
+    }
+
+    // ===== 3D Raycasting & Box Selection Inspector =====
+    setupRaycaster() {
+        if (!this.canvas) return;
+
+        let isDragging = false;
+        let downPos = { x: 0, y: 0 };
+
+        this.canvas.addEventListener('pointerdown', (e) => {
+            downPos = { x: e.clientX, y: e.clientY };
+            isDragging = false;
+        });
+
+        this.canvas.addEventListener('pointermove', (e) => {
+            const dx = Math.abs(e.clientX - downPos.x);
+            const dy = Math.abs(e.clientY - downPos.y);
+            if (dx > 4 || dy > 4) {
+                isDragging = true;
+            }
+        });
+
+        this.canvas.addEventListener('pointerup', (e) => {
+            if (isDragging) return; // Don't trigger inspect when rotating camera
+
+            const rect = this.canvas.getBoundingClientRect();
+            this.mouseVec.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            this.mouseVec.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            this.raycaster.setFromCamera(this.mouseVec, this.camera);
+
+            if (!this.cargoGroup) return;
+
+            const meshes = this.boxMeshes.map(b => b.mesh).filter(m => m.visible);
+            const intersects = this.raycaster.intersectObjects(meshes, false);
+
+            if (intersects.length > 0) {
+                const hitMesh = intersects[0].object;
+                this.selectBoxMesh(hitMesh);
+            } else {
+                this.deselectBox();
+            }
+        });
+    }
+
+    selectBoxMesh(mesh) {
+        // Reset previous selected
+        if (this.selectedMesh && this.selectedMesh.material) {
+            if (this.selectedMesh.userData.originalColor) {
+                this.selectedMesh.material.color.copy(this.selectedMesh.userData.originalColor);
+            }
+            if (this.selectedMesh.material.emissive) {
+                this.selectedMesh.material.emissive.setHex(0x000000);
+            }
+        }
+
+        this.selectedMesh = mesh;
+        if (mesh && mesh.material) {
+            if (mesh.material.emissive) {
+                mesh.material.emissive.setHex(0x06b6d4);
+                mesh.material.emissiveIntensity = 0.5;
+            }
+        }
+
+        if (this.onBoxSelect && mesh && mesh.userData) {
+            this.onBoxSelect(mesh.userData);
+        }
+    }
+
+    deselectBox() {
+        if (this.selectedMesh && this.selectedMesh.material) {
+            if (this.selectedMesh.userData.originalColor) {
+                this.selectedMesh.material.color.copy(this.selectedMesh.userData.originalColor);
+            }
+            if (this.selectedMesh.material.emissive) {
+                this.selectedMesh.material.emissive.setHex(0x000000);
+            }
+        }
+        this.selectedMesh = null;
+        if (this.onBoxSelect) {
+            this.onBoxSelect(null);
+        }
     }
 
     // ===== View & Camera Controls =====
