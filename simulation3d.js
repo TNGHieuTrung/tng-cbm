@@ -316,16 +316,101 @@ class ContainerSimulation {
         return itemsCopy;
     }
 
-    // ===== High-Precision 3D Bin-Packing Algorithm with Orientation, Sequential SKU Packing & Multi-Container Support =====
-    packCargo(cargoItems, algorithm = 'best-balance', containerTypesList = null) {
+    // ===== High-Precision 3D Bin-Packing Algorithm with Strip-Width Optimization, Sequential SKU Packing & Multi-Container Support =====
+    computeWidthStripPlan(baseL, baseW, CW, rotMode) {
+        const a0 = Math.floor((CW + 0.002) / baseW);
+        const purePUsed = a0 * baseW;
+        const purePDensity = a0 / baseL;
+
+        if (rotMode === 'locked' || Math.abs(baseL - baseW) <= 0.01) {
+            return { a: a0, b: 0, used: purePUsed, density: purePDensity };
+        }
+
+        const b0 = Math.floor((CW + 0.002) / baseL);
+        const pureRUsed = b0 * baseL;
+        const pureRDensity = b0 / baseW;
+
+        let best = { a: a0, b: 0, used: purePUsed, density: purePDensity };
+        for (let a = 0; a <= a0; a++) {
+            const b = Math.floor((CW + 0.002 - a * baseW) / baseL);
+            const used = a * baseW + b * baseL;
+            const density = a / baseL + b / baseW;
+            if (density > best.density + 1e-6 ||
+                (Math.abs(density - best.density) <= 1e-6 &&
+                    (used > best.used + 1e-4 || (Math.abs(used - best.used) <= 1e-4 && b < best.b)))) {
+                best = { a, b, used, density };
+            }
+        }
+
+        if (rotMode === 'garment') {
+            if (purePDensity >= best.density * 0.96 && (CW - purePUsed) <= 0.14) {
+                return { a: a0, b: 0, used: purePUsed, density: purePDensity };
+            }
+            if (pureRDensity >= best.density * 0.98 && (CW - pureRUsed) <= 0.14) {
+                return { a: 0, b: b0, used: pureRUsed, density: pureRDensity };
+            }
+        } else {
+            if (purePDensity >= best.density * 0.975 && (CW - purePUsed) <= 0.10) {
+                return { a: a0, b: 0, used: purePUsed, density: purePDensity };
+            }
+            if (pureRDensity >= best.density * 0.975 && (CW - pureRUsed) <= 0.10) {
+                return { a: 0, b: b0, used: pureRUsed, density: pureRDensity };
+            }
+        }
+
+        return best;
+    }
+
+    initSpatialGrid(CW) {
+        this._spatialGrid = new Map();
+        this._spatialCellSize = 0.30;
+        this._spatialCW = CW;
+    }
+
+    getSpatialKeys(x, y, z, l, h, w) {
+        const cs = this._spatialCellSize || 0.30;
+        const halfW = (this._spatialCW || 2.352) / 2;
+        const minGx = Math.floor(x / cs);
+        const maxGx = Math.floor((x + l) / cs);
+        const minGy = Math.floor(y / cs);
+        const maxGy = Math.floor((y + h) / cs);
+        const minGz = Math.floor((z + halfW) / cs);
+        const maxGz = Math.floor((z + halfW + w) / cs);
+
+        const keys = [];
+        for (let gx = minGx; gx <= maxGx; gx++) {
+            for (let gy = minGy; gy <= maxGy; gy++) {
+                for (let gz = minGz; gz <= maxGz; gz++) {
+                    keys.push(((gx + 10) * 1000 + (gy + 10)) * 1000 + (gz + 10));
+                }
+            }
+        }
+        return keys;
+    }
+
+    insertSpatialBox(box) {
+        if (!this._spatialGrid) return;
+        const keys = this.getSpatialKeys(box.x, box.y, box.z, box.l, box.h, box.w);
+        for (let i = 0; i < keys.length; i++) {
+            const k = keys[i];
+            let bucket = this._spatialGrid.get(k);
+            if (!bucket) {
+                bucket = [];
+                this._spatialGrid.set(k, bucket);
+            }
+            bucket.push(box);
+        }
+    }
+
+    packCargo(cargoItems, algorithm = 'best-balance', containerTypesList = null, options = {}) {
         const contList = (containerTypesList && containerTypesList.length > 0)
             ? containerTypesList
             : [this.currentEquipment];
 
-        return this.packMultiContainers(cargoItems, algorithm, contList);
+        return this.packMultiContainers(cargoItems, algorithm, contList, options);
     }
 
-    packMultiContainers(cargoItems, algorithm = 'best-balance', containerTypesList = ['40hc']) {
+    packMultiContainers(cargoItems, algorithm = 'best-balance', containerTypesList = ['40hc'], options = {}) {
         this.clearCargo();
         this.multiContainerData = [];
         this.activeContainerIdx = 0;
@@ -342,7 +427,7 @@ class ContainerSimulation {
             this.currentEquipment = contType;
 
             // Pack single container from remaining unplaced items
-            const packRes = this.packSingleContainerInternal(remainingCargo, spec, algorithm);
+            const packRes = this.packSingleContainerInternal(remainingCargo, spec, algorithm, options);
 
             this.multiContainerData.push({
                 index: idx,
@@ -358,11 +443,20 @@ class ContainerSimulation {
             remainingCargo = packRes.unplacedItems;
         });
 
-        // Display Container 1 in 3D canvas by default
-        this.showContainer(0);
-
         const totalPlaced = this.multiContainerData.reduce((acc, c) => acc + c.stats.placed, 0);
         const totalUnplaced = Math.max(0, totalRequested - totalPlaced);
+
+        this.multiContainerData.forEach((c, idx) => {
+            c.stats.totalRequested = totalRequested;
+            c.stats.fleetTotalRequested = totalRequested;
+            c.stats.fleetTotalPlaced = totalPlaced;
+            c.stats.fleetTotalUnplaced = totalUnplaced;
+            c.stats.containerIndex = idx;
+            c.stats.containerCount = containerTypesList.length;
+        });
+
+        // Display Container 1 in 3D canvas by default
+        this.showContainer(0);
 
         return {
             containers: this.multiContainerData.map(c => c.stats),
@@ -375,16 +469,55 @@ class ContainerSimulation {
         };
     }
 
-    packSingleContainerInternal(cargoItems, spec, algorithm) {
+    computeOptimalContainerCount(cargoItems, algorithm = 'best-balance', contType = '40hc', options = {}) {
+        const prevEquipment = this.currentEquipment;
+        const prevPlacedBoxes = this.placedBoxes;
+        const prevSpatialGrid = this._spatialGrid;
+
+        const spec = this.containerSpecs[contType] || this.containerSpecs['40hc'];
+        const itemsSorted = this.sortCargoItemsByAlgorithm(cargoItems, algorithm);
+        let remainingCargo = itemsSorted.map(it => ({
+            ...it,
+            remainingQty: parseInt(it.qty) || 0
+        }));
+
+        let count = 0;
+        const maxConts = 20;
+        while (count < maxConts) {
+            const remTotal = remainingCargo.reduce((acc, it) => acc + (parseInt(it.remainingQty) || 0), 0);
+            if (remTotal <= 0) break;
+
+            const packRes = this.packSingleContainerInternal(remainingCargo, spec, algorithm, options);
+            if (!packRes || packRes.stats.placed <= 0) break;
+
+            count++;
+            remainingCargo = packRes.unplacedItems;
+            if (remainingCargo.length === 0) break;
+        }
+
+        this.currentEquipment = prevEquipment;
+        this.placedBoxes = prevPlacedBoxes;
+        this._spatialGrid = prevSpatialGrid;
+
+        return Math.max(1, count);
+    }
+
+    packSingleContainerInternal(cargoItems, spec, algorithm, options = {}) {
         const CL = spec.l, CW = spec.w, CH = spec.h;
+        const enforcePayload = options.enforcePayload !== false;
+
         this.placedBoxes = []; // Temporary for collision / support validation
+        this.initSpatialGrid(CW);
 
         const boxMeshesData = [];
-        const candidatePoints = [{ x: 0, y: 0, z: -CW / 2 }];
+        let candidatePoints = [{ x: 0, y: 0, z: -CW / 2 }];
 
         let totalPlaced = 0;
         let totalPlacedVolume = 0;
         let totalPlacedWeight = 0;
+        let rotatedCount = 0;
+        let hitPayloadLimit = false;
+        let maxX = 0;
 
         let cogSumX = 0;
         let cogSumY = 0;
@@ -392,14 +525,35 @@ class ContainerSimulation {
 
         const unplacedItems = [];
 
-        for (const item of cargoItems) {
+        for (let itemIdx = 0; itemIdx < cargoItems.length; itemIdx++) {
+            const item = cargoItems[itemIdx];
             const qty = parseInt(item.remainingQty !== undefined ? item.remainingQty : item.qty) || 0;
             if (qty <= 0) continue;
+
+            // Boundary-only pruning across remaining SKUs' smallest dimension (preserves sub-cm transitions)
+            let minRemDim = Infinity;
+            for (let k = itemIdx; k < cargoItems.length; k++) {
+                const remIt = cargoItems[k];
+                const remQ = parseInt(remIt.remainingQty !== undefined ? remIt.remainingQty : remIt.qty) || 0;
+                if (remQ <= 0) continue;
+                const dL = (parseFloat(remIt.length) || 60) / 100;
+                const dW = (parseFloat(remIt.width) || 50) / 100;
+                const dH = (parseFloat(remIt.height) || 40) / 100;
+                minRemDim = Math.min(minRemDim, dL, dW, dH);
+            }
+            if (isFinite(minRemDim)) {
+                candidatePoints = candidatePoints.filter(pt =>
+                    pt.x + minRemDim <= CL + 0.001 &&
+                    pt.y + minRemDim <= CH + 0.001 &&
+                    pt.z + minRemDim <= CW / 2 + 0.001
+                );
+            }
 
             const baseW = (parseFloat(item.width) || 50) / 100;   // m
             const baseL = (parseFloat(item.length) || 60) / 100;  // m
             const baseH = (parseFloat(item.height) || 40) / 100;  // m
-            const unitWeight = parseFloat(item.weight) || 10;
+            const parsedWt = parseFloat(item.weight);
+            const unitWeight = isNaN(parsedWt) ? 0 : Math.max(0, parsedWt);
             const color = item.color || '#dc2626';
             const shapeType = item.type || 'box';
             const stackable = item.stackable !== false;
@@ -411,85 +565,65 @@ class ContainerSimulation {
 
             const primaryOri = { l: baseL, h: baseH, w: baseW, isPrimary: true };
             const rotOri = { l: baseW, h: baseH, w: baseL, isPrimary: false };
+            const extra3DOris = (rotMode === 'all' || rotMode === '3d') ? [
+                { l: baseL, h: baseW, w: baseH, isPrimary: false },
+                { l: baseW, h: baseL, w: baseH, isPrimary: false },
+                { l: baseH, h: baseL, w: baseW, isPrimary: false },
+                { l: baseH, h: baseW, w: baseL, isPrimary: false }
+            ] : [];
 
-            const orientations = [primaryOri];
-            if (rotMode !== 'locked' && Math.abs(baseL - baseW) > 0.01) {
-                orientations.push(rotOri);
-            }
-            if (rotMode === 'all' || rotMode === '3d') {
-                orientations.push({ l: baseL, h: baseW, w: baseH, isPrimary: false });
-                orientations.push({ l: baseW, h: baseL, w: baseH, isPrimary: false });
-                orientations.push({ l: baseH, h: baseL, w: baseW, isPrimary: false });
-                orientations.push({ l: baseH, h: baseW, w: baseL, isPrimary: false });
-            }
+            const plan = this.computeWidthStripPlan(baseL, baseW, CW, rotMode);
+            const band1EndZ = Math.round((-CW / 2 + plan.a * baseW) * 1000) / 1000;
+            const canRotateHoriz = (rotMode !== 'locked' && Math.abs(baseL - baseW) > 0.01);
 
             while (placedCount < qty) {
+                if (enforcePayload && totalPlacedWeight + unitWeight > spec.payload * 1.05) {
+                    hitPayloadLimit = true;
+                    break;
+                }
+
                 let placedThisBox = false;
                 this.sortCandidatePoints(candidatePoints);
 
-                if (rotMode === 'garment') {
-                    for (let i = 0; i < candidatePoints.length; i++) {
-                        const pt = candidatePoints[i];
-                        if (this.canPlaceBox(pt, primaryOri, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec)) {
-                            this.doRecordBoxData(pt, primaryOri, color, item, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i, boxMeshesData);
-                            placedCount++;
-                            totalPlaced++;
-                            totalPlacedVolume += (primaryOri.l * primaryOri.w * primaryOri.h);
-                            totalPlacedWeight += unitWeight;
-                            cogSumX += (pt.x + primaryOri.l / 2) * unitWeight;
-                            cogSumY += (pt.y + primaryOri.h / 2) * unitWeight;
-                            cogSumZ += (pt.z + primaryOri.w / 2) * unitWeight;
-                            placedThisBox = true;
-                            break;
-                        }
-                        if (Math.abs(baseL - baseW) > 0.01 && this.canPlaceBox(pt, rotOri, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec)) {
-                            this.doRecordBoxData(pt, rotOri, color, item, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i, boxMeshesData);
-                            placedCount++;
-                            totalPlaced++;
-                            totalPlacedVolume += (rotOri.l * rotOri.w * rotOri.h);
-                            totalPlacedWeight += unitWeight;
-                            cogSumX += (pt.x + rotOri.l / 2) * unitWeight;
-                            cogSumY += (pt.y + rotOri.h / 2) * unitWeight;
-                            cogSumZ += (pt.z + rotOri.w / 2) * unitWeight;
-                            placedThisBox = true;
-                            break;
-                        }
+                for (let i = 0; i < candidatePoints.length; i++) {
+                    const pt = candidatePoints[i];
+
+                    let baseOris;
+                    if (plan.b === 0) {
+                        baseOris = canRotateHoriz ? [primaryOri, rotOri] : [primaryOri];
+                    } else if (plan.a === 0) {
+                        baseOris = [rotOri, primaryOri];
+                    } else if (pt.z >= band1EndZ - 0.02) {
+                        baseOris = [rotOri, primaryOri];
+                    } else if (pt.z + primaryOri.w <= band1EndZ + 0.02) {
+                        baseOris = [primaryOri, rotOri];
+                    } else {
+                        baseOris = [rotOri, primaryOri];
                     }
-                } else if (rotMode === 'locked') {
-                    for (let i = 0; i < candidatePoints.length; i++) {
-                        const pt = candidatePoints[i];
-                        if (this.canPlaceBox(pt, primaryOri, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec)) {
-                            this.doRecordBoxData(pt, primaryOri, color, item, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i, boxMeshesData);
-                            placedCount++;
-                            totalPlaced++;
-                            totalPlacedVolume += (primaryOri.l * primaryOri.w * primaryOri.h);
-                            totalPlacedWeight += unitWeight;
-                            cogSumX += (pt.x + primaryOri.l / 2) * unitWeight;
-                            cogSumY += (pt.y + primaryOri.h / 2) * unitWeight;
-                            cogSumZ += (pt.z + primaryOri.w / 2) * unitWeight;
-                            placedThisBox = true;
-                            break;
-                        }
-                    }
-                } else {
-                    for (let i = 0; i < candidatePoints.length; i++) {
-                        const pt = candidatePoints[i];
-                        for (const ori of orientations) {
-                            if (this.canPlaceBox(pt, ori, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec)) {
-                                this.doRecordBoxData(pt, ori, color, item, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i, boxMeshesData);
-                                placedCount++;
-                                totalPlaced++;
-                                totalPlacedVolume += (ori.l * ori.w * ori.h);
-                                totalPlacedWeight += unitWeight;
-                                cogSumX += (pt.x + ori.l / 2) * unitWeight;
-                                cogSumY += (pt.y + ori.h / 2) * unitWeight;
-                                cogSumZ += (pt.z + ori.w / 2) * unitWeight;
-                                placedThisBox = true;
-                                break;
+
+                    const oris = extra3DOris.length > 0 ? baseOris.concat(extra3DOris) : baseOris;
+
+                    for (let j = 0; j < oris.length; j++) {
+                        const ori = oris[j];
+                        if (this.canPlaceBox(pt, ori, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec, enforcePayload)) {
+                            this.doRecordBoxData(pt, ori, color, item, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i, boxMeshesData);
+                            if (pt.y <= 0.002 && plan.a > 0 && plan.b > 0) {
+                                this.addCandidatePoint(candidatePoints, pt.x, 0, band1EndZ, CL, CW, CH);
                             }
+                            if (!ori.isPrimary) rotatedCount++;
+                            if (pt.x + ori.l > maxX) maxX = pt.x + ori.l;
+                            placedCount++;
+                            totalPlaced++;
+                            totalPlacedVolume += (ori.l * ori.w * ori.h);
+                            totalPlacedWeight += unitWeight;
+                            cogSumX += (pt.x + ori.l / 2) * unitWeight;
+                            cogSumY += (pt.y + ori.h / 2) * unitWeight;
+                            cogSumZ += (pt.z + ori.w / 2) * unitWeight;
+                            placedThisBox = true;
+                            break;
                         }
-                        if (placedThisBox) break;
                     }
+                    if (placedThisBox) break;
                 }
 
                 if (!placedThisBox) break;
@@ -504,6 +638,8 @@ class ContainerSimulation {
         const containerVolume = CL * CW * CH;
         const utilization = ((totalPlacedVolume / containerVolume) * 100).toFixed(1);
         const weightUtilization = ((totalPlacedWeight / spec.payload) * 100).toFixed(1);
+        const totalUnplacedCount = unplacedItems.reduce((acc, it) => acc + it.remainingQty, 0);
+        const stopReason = totalUnplacedCount === 0 ? 'done' : (hitPayloadLimit ? 'payload' : 'space');
 
         let cogText = 'Cân đối (Tâm cont)';
         const avgX = totalPlacedWeight > 0 ? (cogSumX / totalPlacedWeight) : (CL / 2);
@@ -522,7 +658,7 @@ class ContainerSimulation {
             unplacedItems: unplacedItems,
             stats: {
                 placed: totalPlaced,
-                unplaced: unplacedItems.reduce((acc, it) => acc + it.remainingQty, 0),
+                unplaced: totalUnplacedCount,
                 volume: totalPlacedVolume.toFixed(3),
                 containerVolume: containerVolume.toFixed(1),
                 weight: totalPlacedWeight.toFixed(1),
@@ -530,7 +666,11 @@ class ContainerSimulation {
                 utilization: utilization,
                 weightUtilization: weightUtilization,
                 cogStatus: cogText,
-                cogPos: { x: avgX.toFixed(2), y: avgY.toFixed(2), z: avgZ.toFixed(2) }
+                cogPos: { x: avgX.toFixed(2), y: avgY.toFixed(2), z: avgZ.toFixed(2) },
+                stopReason: stopReason,
+                enforcePayload: enforcePayload,
+                maxX: maxX.toFixed(3),
+                rotatedCount: rotatedCount
             },
             cogPos: { x: avgX, y: avgY, z: avgZ }
         };
@@ -538,12 +678,14 @@ class ContainerSimulation {
 
     doRecordBoxData(pt, ori, color, item, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, ptIndex, boxMeshesData) {
         const stepNumber = this.placedBoxes.length + 1;
-        this.placedBoxes.push({
+        const boxRecord = {
             x: pt.x, y: pt.y, z: pt.z,
             l: ori.l, h: ori.h, w: ori.w,
             weight: unitWeight,
             stackable: stackable
-        });
+        };
+        this.placedBoxes.push(boxRecord);
+        this.insertSpatialBox(boxRecord);
 
         boxMeshesData.push({
             step: stepNumber,
@@ -623,15 +765,35 @@ class ContainerSimulation {
         return contData.stats;
     }
 
+    // Helper: Returns deduplicated boxes overlapping the query bounding region using the spatial hash grid
+    getCandidateBoxes(x, y, z, l, h, w) {
+        if (!this._spatialGrid) return this.placedBoxes;
+        const keys = this.getSpatialKeys(x, y, z, l, h, w);
+        const seen = new Set();
+        const result = [];
+        for (let i = 0; i < keys.length; i++) {
+            const bucket = this._spatialGrid.get(keys[i]);
+            if (!bucket) continue;
+            for (let j = 0; j < bucket.length; j++) {
+                const box = bucket[j];
+                if (!seen.has(box)) {
+                    seen.add(box);
+                    result.push(box);
+                }
+            }
+        }
+        return result;
+    }
+
     // Helper: Validates if a box can physically be placed at pt with given orientation
-    canPlaceBox(pt, ori, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec) {
+    canPlaceBox(pt, ori, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec, enforcePayload = true) {
         if (pt.x + ori.l > CL + 0.001) return false;
         if (pt.y + ori.h > CH + 0.001) return false;
         if (pt.z + ori.w > CW / 2 + 0.001) return false;
         if (pt.z < -CW / 2 - 0.001) return false;
 
         if (!stackable && pt.y > 0.002) return false;
-        if (totalPlacedWeight + unitWeight > spec.payload * 1.05) return false;
+        if (enforcePayload && totalPlacedWeight + unitWeight > spec.payload * 1.05) return false;
 
         if (this.checkCollision(pt.x, pt.y, pt.z, ori.l, ori.h, ori.w)) return false;
         if (!this.isSupported(pt.x, pt.y, pt.z, ori.l, ori.h, ori.w)) return false;
@@ -678,7 +840,9 @@ class ContainerSimulation {
         let maxSupportX = -Infinity;
         let minSupportX = Infinity;
 
-        for (const b of this.placedBoxes) {
+        const candidates = this.getCandidateBoxes(x, y - 0.015, z, l, 0.03, w);
+        for (let i = 0; i < candidates.length; i++) {
+            const b = candidates[i];
             // Check if top of box b matches y
             if (Math.abs((b.y + b.h) - y) < eps) {
                 // If box below is explicitly non-stackable, cannot place on it
@@ -780,7 +944,9 @@ class ContainerSimulation {
 
     checkCollision(x, y, z, l, h, w) {
         const eps = 0.002; // 2mm margin
-        for (const box of this.placedBoxes) {
+        const candidates = this.getCandidateBoxes(x, y, z, l, h, w);
+        for (let i = 0; i < candidates.length; i++) {
+            const box = candidates[i];
             if (x < box.x + box.l - eps && x + l > box.x + eps &&
                 y < box.y + box.h - eps && y + h > box.y + eps &&
                 z < box.z + box.w - eps && z + w > box.z + eps) {

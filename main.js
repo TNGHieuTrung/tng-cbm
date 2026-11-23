@@ -75,6 +75,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const eqPayloadDisplay = document.getElementById('eqPayload');
     const simEquipmentLabel = document.getElementById('simEquipmentLabel');
     const autoFitToggle = document.getElementById('autoFitToggle');
+    const enforcePayloadToggle = document.getElementById('enforcePayloadToggle');
+    const isPayloadEnforced = () => (enforcePayloadToggle ? enforcePayloadToggle.checked : true);
     const bestFitBanner = document.getElementById('bestFitBanner');
     const bestFitMsg = document.getElementById('bestFitMsg');
     const btnApplyFit = document.getElementById('btnApplyFit');
@@ -138,6 +140,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    if (enforcePayloadToggle) {
+        enforcePayloadToggle.addEventListener('change', () => {
+            evaluateBestFitAndSync();
+        });
+    }
+
     // 3. Calculator Tab Selector (Load Planner vs CBM Calculator)
     const selectorTabs = document.querySelectorAll('.selector-tab');
     const loadPlannerSection = document.getElementById('loadPlanner');
@@ -168,7 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let nextCargoId = 3;
     const defaultColors = ['#dc2626', '#2563eb', '#16a34a', '#ea580c', '#7c3aed', '#0891b2'];
 
-    function setupCargoCardListeners(card) {
+    function setupCargoCardListeners(card, silent = false) {
         const widthInput = card.querySelector('.cargo-width');
         const lengthInput = card.querySelector('.cargo-length');
         const heightInput = card.querySelector('.cargo-height');
@@ -178,12 +186,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalWeightSpan = card.querySelector('[id^="totalWeight"]');
         const totalVolSpan = card.querySelector('[id^="totalVol"]');
 
-        const calcCard = () => {
+        const calcCard = (shouldSync = true) => {
             const w = parseFloat(widthInput?.value) || 0;
             const l = parseFloat(lengthInput?.value) || 0;
             const h = parseFloat(heightInput?.value) || 0;
             const qty = parseInt(qtyInput?.value) || 0;
-            const weight = parseFloat(weightInput?.value) || 0;
+            const rawWt = parseFloat(weightInput?.value);
+            const weight = isNaN(rawWt) ? 0 : Math.max(0, rawWt);
 
             const totalWt = (weight * qty).toLocaleString('en-US', { maximumFractionDigits: 1 });
             const totalVol = ((w * l * h * qty) / 1000000).toFixed(3);
@@ -191,12 +200,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (totalWeightSpan) totalWeightSpan.textContent = totalWt;
             if (totalVolSpan) totalVolSpan.textContent = totalVol;
 
-            updateOverallSummary();
-            evaluateBestFitAndSync();
+            if (shouldSync) {
+                updateOverallSummary();
+                evaluateBestFitAndSync();
+            }
         };
 
         [widthInput, lengthInput, heightInput, qtyInput, weightInput].forEach(inp => {
-            if (inp) inp.addEventListener('input', calcCard);
+            if (inp) inp.addEventListener('input', () => calcCard(true));
         });
 
         // Pill switches for type & stackable
@@ -280,7 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        calcCard();
+        calcCard(!silent);
     }
 
     function updateOverallSummary() {
@@ -310,7 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (summaryItems) summaryItems.textContent = totalItems.toString();
     }
 
-    function duplicateCargoCard(cardToClone) {
+    function duplicateCargoCard(cardToClone, silent = false) {
         const clone = cardToClone.cloneNode(true);
         const cardId = nextCargoId++;
         clone.setAttribute('data-cargo-id', cardId);
@@ -341,9 +352,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         cargoCardsContainer.appendChild(clone);
-        setupCargoCardListeners(clone);
-        updateOverallSummary();
-        evaluateBestFitAndSync();
+        setupCargoCardListeners(clone, silent);
+        if (!silent) {
+            updateOverallSummary();
+            evaluateBestFitAndSync();
+        }
     }
 
     document.querySelectorAll('.cargo-card').forEach(card => {
@@ -369,7 +382,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const l = parseFloat(card.querySelector('.cargo-length')?.value) || 60;
             const h = parseFloat(card.querySelector('.cargo-height')?.value) || 40;
             const qty = parseInt(card.querySelector('.cargo-qty')?.value) || 1;
-            const wt = parseFloat(card.querySelector('.cargo-weight')?.value) || 10;
+            const rawWt = parseFloat(card.querySelector('.cargo-weight')?.value);
+            const wt = isNaN(rawWt) ? 0 : Math.max(0, rawWt);
             const color = card.querySelector('.color-picker')?.value || '#dc2626';
             const stackChecked = card.querySelector('.checkbox-pill input')?.checked !== false;
             const rotVal = card.querySelector('.cargo-rotation')?.value || 'fit';
@@ -384,9 +398,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${idx + 1}</td>
                 <td><input type="color" class="tbl-color" value="${color}"></td>
                 <td><input type="text" class="tbl-name" value="${name}"></td>
-                <td><input type="number" class="tbl-length" value="${l}" min="1"></td>
-                <td><input type="number" class="tbl-width" value="${w}" min="1"></td>
-                <td><input type="number" class="tbl-height" value="${h}" min="1"></td>
+                <td><input type="number" class="tbl-length" value="${l}" min="1" step="any"></td>
+                <td><input type="number" class="tbl-width" value="${w}" min="1" step="any"></td>
+                <td><input type="number" class="tbl-height" value="${h}" min="1" step="any"></td>
                 <td><input type="number" class="tbl-qty" value="${qty}" min="1"></td>
                 <td><input type="number" class="tbl-weight" value="${wt}" min="0" step="0.1"></td>
                 <td class="tbl-tot-wt">${totalWt}</td>
@@ -570,7 +584,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const length = parseFloat(card.querySelector('.cargo-length')?.value) || 60;
             const height = parseFloat(card.querySelector('.cargo-height')?.value) || 40;
             const qty = parseInt(card.querySelector('.cargo-qty')?.value) || 1;
-            const weight = parseFloat(card.querySelector('.cargo-weight')?.value) || 10;
+            const rawWt = parseFloat(card.querySelector('.cargo-weight')?.value);
+            const weight = isNaN(rawWt) ? 0 : Math.max(0, rawWt);
             const color = card.querySelector('.color-picker')?.value || '#dc2626';
 
             const typeRadio = card.querySelector('input[type="radio"]:checked');
@@ -593,7 +608,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 6. Intelligent Best Fit Recommendation Algorithm
-    function evaluateBestFit(cargoItems) {
+    function evaluateBestFit(cargoItems, enforcePayload = isPayloadEnforced()) {
         let totalVol = 0;
         let totalWt = 0;
         let maxL = 0, maxW = 0, maxH = 0;
@@ -620,31 +635,35 @@ document.addEventListener('DOMContentLoaded', () => {
         const lang = document.documentElement.lang;
 
         // Constraint Evaluation
-        if (maxL > 5.89 || maxW > 2.35 || totalVol > 28.5 || totalWt > 28200 || maxH > 2.38) {
+        if (maxL > 5.89 || maxW > 2.35 || totalVol > 28.5 || (enforcePayload && totalWt > 28200) || maxH > 2.38) {
             // Cannot fit in 20DC
-            if (totalVol <= 59.0 && totalWt <= 26680 && maxH <= 2.38 && maxL <= 12.03) {
+            if (totalVol <= 59.0 && (!enforcePayload || totalWt <= 26680) && maxH <= 2.38 && maxL <= 12.03) {
                 recommended = '40dc';
                 msg = lang === 'vi'
                     ? `Đề xuất tối ưu: <span class="fit-highlight">40' Dry Container (40DC)</span> — Thể tích hàng (${totalVol.toFixed(1)} m³) vượt quá cont 20ft (33.2 m³). Vừa vặn 100% trong cont 40DC!`
                     : `Optimal Recommendation: <span class="fit-highlight">40' Dry Container (40DC)</span> — Cargo volume (${totalVol.toFixed(1)} m³) exceeds 20ft container (33.2 m³). Fits 100% in 40DC!`;
-            } else if (totalVol <= 68.5 && totalWt <= 26460 && maxL <= 12.03) {
+            } else if (totalVol <= 68.5 && (!enforcePayload || totalWt <= 26460) && maxL <= 12.03) {
                 recommended = '40hc';
                 msg = lang === 'vi'
                     ? `Đề xuất tối ưu: <span class="fit-highlight">40' High Cube (40HC)</span> — Chiều cao kiện hàng (${(maxH*100).toFixed(0)}cm) hoặc thể tích (${totalVol.toFixed(1)} m³) phù hợp nhất với cont 40' cao!`
                     : `Optimal Recommendation: <span class="fit-highlight">40' High Cube (40HC)</span> — Cargo height (${(maxH*100).toFixed(0)}cm) or volume (${totalVol.toFixed(1)} m³) is ideal for 40' High Cube!`;
-            } else if (totalVol <= 76.5 && totalWt <= 27800 && maxL <= 13.55) {
+            } else if (totalVol <= 76.5 && (!enforcePayload || totalWt <= 27800) && maxL <= 13.55) {
                 recommended = '45hc';
                 msg = lang === 'vi'
                     ? `Đề xuất tối ưu: <span class="fit-highlight">Container 45' High Cube (45HC)</span> — Khối tích lớn (${totalVol.toFixed(1)} m³, dài ${maxL.toFixed(2)}m), vừa vặn 100% trong cont 45ft!`
                     : `Optimal Recommendation: <span class="fit-highlight">45' High Cube Container (45HC)</span> — High cargo volume (${totalVol.toFixed(1)} m³, length ${maxL.toFixed(2)}m), fits 100% in 45HC!`;
             } else {
                 // Multi-container requirement
-                numContainers = Math.ceil(Math.max(totalVol / 65, totalWt / 26000));
+                const wtContainers = enforcePayload ? (totalWt / 26000) : 0;
+                numContainers = Math.max(2, Math.ceil(Math.max(totalVol / 65, wtContainers)));
                 recommended = '40hc';
                 isOversized = true;
+                const reasonNote = (enforcePayload && totalWt > 27800 && totalVol <= 76.5)
+                    ? (lang === 'vi' ? ' (vượt giới hạn tải trọng)' : ' (exceeds payload limit)')
+                    : '';
                 msg = lang === 'vi'
-                    ? `⚠️ Cảnh báo vượt tải: Lô hàng lớn (${totalVol.toFixed(1)} m³, ${totalWt.toLocaleString()} kg) vượt quá 1 container! Cần <span class="fit-highlight">${numContainers} container 40HC</span> để xếp hết.`
-                    : `⚠️ Over-capacity Alert: Large shipment (${totalVol.toFixed(1)} m³, ${totalWt.toLocaleString()} kg) exceeds 1 container! Requires <span class="fit-highlight">${numContainers}x 40HC containers</span>.`;
+                    ? `⚠️ Cảnh báo vượt tải: Lô hàng lớn (${totalVol.toFixed(1)} m³, ${totalWt.toLocaleString()} kg)${reasonNote} vượt quá 1 container! Cần <span class="fit-highlight">${numContainers} container 40HC</span> để xếp hết.`
+                    : `⚠️ Over-capacity Alert: Large shipment (${totalVol.toFixed(1)} m³, ${totalWt.toLocaleString()} kg)${reasonNote} exceeds 1 container! Requires <span class="fit-highlight">${numContainers}x 40HC containers</span>.`;
             }
         } else {
             // Perfectly fits in 20DC
@@ -660,7 +679,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function evaluateBestFitAndSync() {
         const cargoItems = getCargoData();
-        const bestInfo = evaluateBestFit(cargoItems);
+        const bestInfo = evaluateBestFit(cargoItems, isPayloadEnforced());
 
         // Update Banner UI
         if (bestFitBanner && bestFitMsg) {
@@ -709,8 +728,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!activeContainers || activeContainers.length === 0) {
                 activeContainers = [selectedEquipment || '20dc'];
             }
-            const result = simulation.packCargo(cargoItems, selectedAlgo, activeContainers);
+            const result = simulation.packCargo(cargoItems, selectedAlgo, activeContainers, { enforcePayload: isPayloadEnforced() });
             renderContainerTabs(result);
+            const firstEq = activeContainers[0] || selectedEquipment || '20dc';
+            const data = equipmentData[firstEq] || equipmentData['40hc'];
+            const hudContainerTitle = document.getElementById('hudContainerTitle');
+            if (hudContainerTitle) hudContainerTitle.textContent = `Container 1 (${data.label.split(' ')[0]})`;
+            if (simEquipmentLabel) simEquipmentLabel.textContent = activeContainers.length > 1 ? `${data.label} (Cont 1)` : data.label;
             updateUIWithSimulationResult(result.activeContainerStats || result);
         }, 150);
     }
@@ -769,9 +793,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleAutoSplit() {
         const cargoItems = getCargoData();
-        const fit = evaluateBestFit(cargoItems);
-        const needed = Math.max(2, fit.numContainers || Math.ceil(fit.totalVol / 68.5));
-        activeContainers = Array(needed).fill(selectedEquipment || '40hc');
+        const selectedAlgo = document.querySelector('input[name="algorithm"]:checked')?.value || 'best-balance';
+        const eqType = selectedEquipment || '40hc';
+        const needed = simulation
+            ? simulation.computeOptimalContainerCount(cargoItems, selectedAlgo, eqType, { enforcePayload: isPayloadEnforced() })
+            : Math.max(2, evaluateBestFit(cargoItems, isPayloadEnforced()).numContainers || 2);
+        activeContainers = Array(Math.max(1, needed)).fill(eqType);
         triggerLiveSimulation();
         if (containerTabsBar) {
             containerTabsBar.style.display = 'flex';
@@ -801,24 +828,53 @@ document.addEventListener('DOMContentLoaded', () => {
         const hudCog = document.getElementById('hudCog');
         const hudStatusBadge = document.getElementById('hudStatusBadge');
 
-        if (hudPlaced) hudPlaced.textContent = `${result.placed} / ${result.totalRequested}`;
+        const fleetReq = result.fleetTotalRequested ?? result.totalRequested ?? (result.placed + (result.unplaced || 0));
+        const fleetPlaced = result.fleetTotalPlaced ?? result.placed;
+        const fleetUnplaced = result.fleetTotalUnplaced ?? (result.unplaced || 0);
+        const contCount = result.containerCount || 1;
+
+        if (hudPlaced) {
+            hudPlaced.textContent = contCount > 1
+                ? `${result.placed} kiện (Tổng: ${fleetPlaced} / ${fleetReq})`
+                : `${result.placed} / ${fleetReq}`;
+        }
         if (hudVol) hudVol.textContent = `${result.volume} m³ / ${result.containerVolume} m³`;
         if (hudWt) hudWt.textContent = `${result.weight} kg`;
         if (hudUtil) hudUtil.textContent = `${result.utilization}%`;
         if (hudCog) hudCog.textContent = result.cogStatus;
 
-        if (result.unplaced > 0) {
+        if (fleetUnplaced > 0) {
             if (hudUnplacedRow) hudUnplacedRow.style.display = 'flex';
-            if (hudUnplaced) hudUnplaced.textContent = `${result.unplaced} kiện (Cont đầy)`;
+            if (hudUnplaced) {
+                hudUnplaced.style.color = '#ef4444';
+                const unplacedAmt = contCount > 1 ? fleetUnplaced : (result.unplaced || fleetUnplaced);
+                hudUnplaced.textContent = result.stopReason === 'payload'
+                    ? `${unplacedAmt} kiện (Chạm tải trọng ${result.maxPayload.toLocaleString()} kg)`
+                    : `${unplacedAmt} kiện (Hết thể tích Cont)`;
+            }
             if (hudStatusBadge) {
-                hudStatusBadge.textContent = `Chưa xếp: ${result.unplaced} kiện`;
+                hudStatusBadge.textContent = `Chưa xếp: ${fleetUnplaced} kiện`;
+                hudStatusBadge.classList.remove('info');
                 hudStatusBadge.classList.add('warning');
+            }
+        } else if (contCount > 1 && (result.unplaced || 0) > 0) {
+            if (hudUnplacedRow) hudUnplacedRow.style.display = 'flex';
+            if (hudUnplaced) {
+                hudUnplaced.style.color = '#38bdf8';
+                hudUnplaced.textContent = result.stopReason === 'payload'
+                    ? `${result.unplaced} kiện → sang Cont sau (chạm tải trọng)`
+                    : `${result.unplaced} kiện → sang Cont sau`;
+            }
+            if (hudStatusBadge) {
+                hudStatusBadge.textContent = `Đủ 100% (${contCount} Cont)`;
+                hudStatusBadge.classList.remove('warning');
+                hudStatusBadge.classList.add('info');
             }
         } else {
             if (hudUnplacedRow) hudUnplacedRow.style.display = 'none';
             if (hudStatusBadge) {
-                hudStatusBadge.textContent = '100% Vừa vặn';
-                hudStatusBadge.classList.remove('warning');
+                hudStatusBadge.textContent = contCount > 1 ? `Đủ 100% (${contCount} Cont)` : '100% Vừa vặn';
+                hudStatusBadge.classList.remove('warning', 'info');
             }
         }
 
@@ -834,10 +890,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const resCog = document.getElementById('resultCog');
         const simResults = document.getElementById('simResults');
 
-        if (resPlaced) resPlaced.textContent = `${result.placed} / ${result.totalRequested} kiện`;
-        if (result.unplaced > 0) {
+        if (resPlaced) {
+            resPlaced.textContent = contCount > 1
+                ? `${result.placed} kiện (Tổng: ${fleetPlaced} / ${fleetReq} kiện)`
+                : `${result.placed} / ${fleetReq} kiện`;
+        }
+        if (fleetUnplaced > 0) {
             if (resUnplacedRow) resUnplacedRow.style.display = 'table-row';
-            if (resUnplaced) resUnplaced.textContent = `${result.unplaced} kiện chưa vừa container!`;
+            if (resUnplaced) {
+                resUnplaced.textContent = result.stopReason === 'payload'
+                    ? `${fleetUnplaced} kiện chưa xếp (Chạm giới hạn tải trọng ${result.maxPayload.toLocaleString()} kg)`
+                    : `${fleetUnplaced} kiện chưa vừa container!`;
+            }
         } else {
             if (resUnplacedRow) resUnplacedRow.style.display = 'none';
         }
@@ -914,9 +978,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const l = item.length || 60;
             const h = item.height || 40;
             const q = item.qty || 1;
-            const wt = item.weight || 10;
-
-            const itemVol = (w * l * h * q) / 1000000;
+            const rawWt = parseFloat(item.weight);
+            const wt = isNaN(rawWt) ? 0 : Math.max(0, rawWt);
             const itemWt = wt * q;
 
             totalVol += itemVol;
@@ -1051,7 +1114,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const l = item.length || 60;
                 const h = item.height || 40;
                 const q = item.qty || 1;
-                const wt = item.weight || 10;
+                const rawWt = parseFloat(item.weight);
+                const wt = isNaN(rawWt) ? 0 : Math.max(0, rawWt);
                 return {
                     "STT": idx + 1,
                     "Tên hàng hóa": item.name,
@@ -1093,7 +1157,13 @@ document.addEventListener('DOMContentLoaded', () => {
             reader.onload = (evt) => {
                 try {
                     const data = new Uint8Array(evt.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
+                    let workbook;
+                    if (file.name.toLowerCase().endsWith('.csv')) {
+                        const csvText = new TextDecoder('utf-8').decode(data).replace(/^\uFEFF/, '');
+                        workbook = XLSX.read(csvText, { type: 'string' });
+                    } else {
+                        workbook = XLSX.read(data, { type: 'array' });
+                    }
                     const firstSheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[firstSheetName];
                     const rows = XLSX.utils.sheet_to_json(worksheet);
@@ -1111,19 +1181,41 @@ document.addEventListener('DOMContentLoaded', () => {
                                 card = cargoCardsContainer.querySelector('.cargo-card');
                             } else {
                                 const firstCard = cargoCardsContainer.querySelector('.cargo-card');
-                                duplicateCargoCard(firstCard);
+                                duplicateCargoCard(firstCard, true);
                                 const allCards = cargoCardsContainer.querySelectorAll('.cargo-card');
                                 card = allCards[allCards.length - 1];
                             }
 
                             // Extract values supporting various header names (Vietnamese & English)
                             const name = r['Tên hàng hóa'] || r['Tên kiện hàng (Item Name)'] || r['Tên hàng'] || r['Name'] || r['Item'] || `Kiện hàng ${idx + 1}`;
-                            const l = r['Dài (cm)'] || r['Dài'] || r['Length'] || r['L'] || 60;
-                            const w = r['Rộng (cm)'] || r['Rộng'] || r['Width'] || r['W'] || 50;
-                            const h = r['Cao (cm)'] || r['Cao'] || r['Height'] || r['H'] || 40;
-                            const q = r['Số lượng (Qty)'] || r['Số lượng'] || r['Quantity'] || r['Qty'] || 10;
-                            const wt = r['Trọng lượng mỗi kiện (kg)'] || r['Khối lượng (kg)'] || r['Trọng lượng'] || r['Weight'] || 10;
-                            const col = r['Màu sắc (Hex)'] || r['Màu sắc'] || r['Color'] || defaultColors[idx % defaultColors.length];
+                            const l = parseFloat(r['Dài (cm)'] ?? r['Dài'] ?? r['Length'] ?? r['L']) || 60;
+                            const w = parseFloat(r['Rộng (cm)'] ?? r['Rộng'] ?? r['Width'] ?? r['W']) || 50;
+                            const h = parseFloat(r['Cao (cm)'] ?? r['Cao'] ?? r['Height'] ?? r['H']) || 40;
+                            const q = parseInt(r['Số lượng (Qty)'] ?? r['Số lượng'] ?? r['Quantity'] ?? r['Qty']) || 1;
+                            const rawWt = r['Đơn trọng (kg)'] ?? r['Trọng lượng mỗi kiện (kg)'] ?? r['Khối lượng (kg)'] ?? r['Trọng lượng'] ?? r['Weight'] ?? r['Unit Wt (kg)'];
+                            const parsedWt = (rawWt !== undefined && rawWt !== null && String(rawWt).trim() !== '') ? parseFloat(rawWt) : 0;
+                            const wt = isNaN(parsedWt) ? 0 : Math.max(0, parsedWt);
+
+                            const rawCol = r['Màu sắc (Hex)'] ?? r['Màu sắc'] ?? r['Color'] ?? '';
+                            const colStr = String(rawCol).trim();
+                            const hexColor = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(colStr)
+                                ? colStr
+                                : defaultColors[idx % defaultColors.length];
+
+                            const rawStop = r['Điểm dỡ hàng'] ?? r['Điểm dỡ hàng (Stop)'] ?? r['Stop'];
+                            const stopVal = (rawStop !== undefined && rawStop !== null && String(rawStop).trim() !== '')
+                                ? String(rawStop).trim()
+                                : 'Stop 1';
+
+                            const rawStack = r['Xếp chồng (1=Có, 0=Không)'] ?? r['Xếp chồng'];
+                            const hasStackCol = (rawStack !== undefined && rawStack !== null && String(rawStack).trim() !== '');
+                            const stackVal = hasStackCol ? !(String(rawStack).trim() === '0' || String(rawStack).trim().toLowerCase() === 'false') : true;
+
+                            const rawRot = r['Khóa xoay (1=Khóa, 0=Tự do)'];
+                            const hasRotCol = (rawRot !== undefined && rawRot !== null && String(rawRot).trim() !== '');
+                            const rotVal = hasRotCol
+                                ? ((String(rawRot).trim() === '1' || String(rawRot).trim().toLowerCase() === 'true') ? 'locked' : 'fit')
+                                : null;
 
                             if (card) {
                                 card.querySelector('.cargo-name').value = name;
@@ -1132,14 +1224,30 @@ document.addEventListener('DOMContentLoaded', () => {
                                 card.querySelector('.cargo-height').value = h;
                                 card.querySelector('.cargo-qty').value = q;
                                 card.querySelector('.cargo-weight').value = wt;
+                                card.dataset.stop = stopVal;
+
                                 const colPicker = card.querySelector('.color-picker');
-                                if (colPicker) colPicker.value = col.startsWith('#') ? col : defaultColors[idx % defaultColors.length];
+                                if (colPicker) colPicker.value = hexColor;
+
+                                const stackCb = card.querySelector('.checkbox-pill input');
+                                const stackPill = card.querySelector('.checkbox-pill');
+                                if (stackCb) stackCb.checked = stackVal;
+                                if (stackPill) stackPill.classList.toggle('active', stackVal);
+
+                                const rotSel = card.querySelector('.cargo-rotation');
+                                if (rotSel && rotVal) rotSel.value = rotVal;
+
+                                const cWtSpan = card.querySelector('[id^="totalWeight"]');
+                                const cVolSpan = card.querySelector('[id^="totalVol"]');
+                                if (cWtSpan) cWtSpan.textContent = (wt * q).toLocaleString('en-US', { maximumFractionDigits: 1 });
+                                if (cVolSpan) cVolSpan.textContent = ((w * l * h * q) / 1000000).toFixed(3);
                             }
                         });
 
+                        activeContainers = [selectedEquipment || '40hc'];
                         updateOverallSummary();
-                        evaluateBestFitAndSync();
                         syncCardsToTable();
+                        evaluateBestFitAndSync();
                         alert(`Đã nhập thành công ${rows.length} loại hàng hóa từ file Excel!`);
                     } else {
                         alert('Không tìm thấy dữ liệu hàng hóa trong file đã chọn!');
@@ -1168,6 +1276,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const playbackCargoName = document.getElementById('playbackCargoName');
     const speedButtons = document.querySelectorAll('.playback-speed .speed-btn');
 
+    const fmtCm = (m) => parseFloat((m * 100).toFixed(2));
+
     if (simulation) {
         simulation.onStepChange = (current, total, currentItem) => {
             if (playbackCurrentStep) playbackCurrentStep.textContent = current;
@@ -1181,9 +1291,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (playbackCargoName) {
                 if (currentItem) {
-                    const l_cm = Math.round(currentItem.l * 100);
-                    const w_cm = Math.round(currentItem.w * 100);
-                    const h_cm = Math.round(currentItem.h * 100);
+                    const l_cm = fmtCm(currentItem.l);
+                    const w_cm = fmtCm(currentItem.w);
+                    const h_cm = fmtCm(currentItem.h);
                     playbackCargoName.textContent = `Đang xếp #${current}: ${currentItem.name} (${l_cm}×${w_cm}×${h_cm}cm, ${currentItem.weight}kg)`;
                 } else if (current === 0) {
                     playbackCargoName.textContent = 'Container trống • Bắt đầu xếp hàng';
@@ -1206,9 +1316,9 @@ document.addEventListener('DOMContentLoaded', () => {
         simulation.onBoxSelect = (boxData) => {
             if (!boxInspectorCard) return;
             if (boxData) {
-                const l_cm = Math.round(boxData.l * 100);
-                const w_cm = Math.round(boxData.w * 100);
-                const h_cm = Math.round(boxData.h * 100);
+                const l_cm = fmtCm(boxData.l);
+                const w_cm = fmtCm(boxData.w);
+                const h_cm = fmtCm(boxData.h);
                 if (inspStep) inspStep.textContent = `#${boxData.step}`;
                 if (inspName) inspName.textContent = boxData.name;
                 if (inspDims) inspDims.textContent = `${l_cm} × ${w_cm} × ${h_cm} cm`;

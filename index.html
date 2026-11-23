@@ -132,10 +132,16 @@
                 <div class="config-section">
                     <div class="equipment-header-row">
                         <h3 data-i18n="app.equipment.title"><i class="fas fa-ship"></i> Chọn thiết bị vận chuyển</h3>
-                        <label class="auto-fit-toggle-label">
-                            <input type="checkbox" id="autoFitToggle" checked>
-                            <span data-i18n="app.bestFit.autoMode">⚡ Tự động chọn cont phù hợp (Best Fit)</span>
-                        </label>
+                        <div class="equipment-toggles-wrap">
+                            <label class="auto-fit-toggle-label">
+                                <input type="checkbox" id="autoFitToggle" checked>
+                                <span data-i18n="app.bestFit.autoMode">⚡ Tự động chọn cont phù hợp (Best Fit)</span>
+                            </label>
+                            <label class="auto-fit-toggle-label payload-toggle-label" title="Bật để giới hạn theo tải trọng tối đa của Container; Tắt để mô phỏng tối ưu thể tích CBM thuần túy">
+                                <input type="checkbox" id="enforcePayloadToggle" checked>
+                                <span data-i18n="app.bestFit.payloadMode">⚖️ Giới hạn tải trọng</span>
+                            </label>
+                        </div>
                     </div>
 
                     <!-- Dynamic Best Fit Recommendation Banner -->
@@ -216,15 +222,15 @@
                             <div class="dims-row">
                                 <div class="dim-input">
                                     <label data-i18n="app.cargo.width">Rộng (cm)</label>
-                                    <input type="number" class="cargo-width" value="50" min="1">
+                                    <input type="number" class="cargo-width" value="50" min="1" step="any">
                                 </div>
                                 <div class="dim-input">
                                     <label data-i18n="app.cargo.length">Dài (cm)</label>
-                                    <input type="number" class="cargo-length" value="60" min="1">
+                                    <input type="number" class="cargo-length" value="60" min="1" step="any">
                                 </div>
                                 <div class="dim-input">
                                     <label data-i18n="app.cargo.height">Cao (cm)</label>
-                                    <input type="number" class="cargo-height" value="40" min="1">
+                                    <input type="number" class="cargo-height" value="40" min="1" step="any">
                                 </div>
                                 <div class="dim-input">
                                     <label data-i18n="app.cargo.qty">Số lượng</label>
@@ -305,15 +311,15 @@
                             <div class="dims-row">
                                 <div class="dim-input">
                                     <label data-i18n="app.cargo.width">Rộng (cm)</label>
-                                    <input type="number" class="cargo-width" value="40" min="1">
+                                    <input type="number" class="cargo-width" value="40" min="1" step="any">
                                 </div>
                                 <div class="dim-input">
                                     <label data-i18n="app.cargo.length">Dài (cm)</label>
-                                    <input type="number" class="cargo-length" value="40" min="1">
+                                    <input type="number" class="cargo-length" value="40" min="1" step="any">
                                 </div>
                                 <div class="dim-input">
                                     <label data-i18n="app.cargo.height">Cao (cm)</label>
-                                    <input type="number" class="cargo-height" value="30" min="1">
+                                    <input type="number" class="cargo-height" value="30" min="1" step="any">
                                 </div>
                                 <div class="dim-input">
                                     <label data-i18n="app.cargo.qty">Số lượng</label>
@@ -499,8 +505,8 @@
                         <!-- Dynamic tabs rendered by JS -->
                     </div>
                     <div class="tabs-actions">
-                        <button class="btn-add-cont" id="btnAddCont" title="Thêm một Container mới"><i class="fas fa-plus"></i> <span data-i18n="sim.addCont">+ Thêm Cont</span></button>
-                        <button class="btn-auto-split" id="btnAutoSplit" title="Tự động tính số lượng cont tối ưu và phân bổ toàn bộ hàng hóa"><i class="fas fa-bolt"></i> <span data-i18n="sim.autoSplit">⚡ Phân bổ Cont tự động</span></button>
+                        <button class="btn-add-cont" id="btnAddCont" title="Thêm một Container mới"><i class="fas fa-plus"></i> <span data-i18n="sim.addCont">Thêm Container</span></button>
+                        <button class="btn-auto-split" id="btnAutoSplit" title="Tự động tính số lượng cont tối ưu và phân bổ toàn bộ hàng hóa"><i class="fas fa-bolt"></i> <span data-i18n="sim.autoSplit">Tự động phân bổ nhiều Cont</span></button>
                     </div>
                 </div>
 
