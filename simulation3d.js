@@ -279,7 +279,7 @@ class ContainerSimulation {
         }
     }
 
-    // ===== High-Precision 3D Bin-Packing Algorithm with Orientation & Multidimensional Space Filling =====
+    // ===== High-Precision 3D Bin-Packing Algorithm with Orientation, Sequential SKU Packing & Seamless Interlocking ("Gối đầu") =====
     packCargo(cargoItems, algorithm = 'best-balance') {
         this.clearCargo();
 
@@ -325,8 +325,10 @@ class ContainerSimulation {
             });
         }
 
-        // Sequential packing coordinate along container length (X axis)
-        let currentStartX = 0; // Starts from back wall (x = 0)
+        // Candidate Points system for seamless 3D interlocking ("Gối đầu" tại điểm giao nhau)
+        const candidatePoints = [
+            { x: 0, y: 0, z: -CW / 2 }
+        ];
 
         for (const item of itemsCopy) {
             const qty = parseInt(item.qty) || 0;
@@ -343,111 +345,98 @@ class ContainerSimulation {
 
             let placedCount = 0;
 
-            // Determine optimal orientation to maximize container width utilization
-            let dimL = baseL, dimW = baseW, dimH = baseH;
-
-            if (rotMode !== 'locked') {
-                const colsOrig = Math.floor(CW / baseW);
-                const colsRot = Math.floor(CW / baseL);
-                const utilOrig = colsOrig > 0 ? (colsOrig * baseW) / CW : 0;
-                const utilRot = colsRot > 0 ? (colsRot * baseL) / CW : 0;
-
-                if (colsRot > 0 && utilRot > utilOrig && baseW <= CL + 0.05) {
-                    dimW = baseL;
-                    dimL = baseW;
-                } else if (dimW > CW && dimL <= CW) {
-                    dimW = baseL;
-                    dimL = baseW;
-                }
+            // Determine orientations
+            const orientations = [];
+            orientations.push({ l: baseL, h: baseH, w: baseW });
+            if (rotMode !== 'locked' && Math.abs(baseL - baseW) > 0.01) {
+                orientations.push({ l: baseW, h: baseH, w: baseL });
             }
 
-            // Check if single box physically exceeds container inner dimensions
-            const canFitPhysically = (dimL <= CL + 0.05 && dimW <= CW + 0.05 && dimH <= CH + 0.05);
-            if (!canFitPhysically) {
-                console.warn(`Item ${item.name} exceeds container physical limits!`);
-                continue;
-            }
+            // Pack every unit of this item sequentially
+            while (placedCount < qty) {
+                let placedThisBox = false;
 
-            const maxLayers = stackable ? Math.max(1, Math.floor(CH / dimH)) : 1;
-            const maxCols = Math.max(1, Math.floor(CW / dimW));
+                // Sort candidate points: smallest X first (fill notches/step-downs left by previous items FIRST), then Y (bottom-up), then Z (left-to-right)
+                this.sortCandidatePoints(candidatePoints);
 
-            // Laterally center the boxes in the container width
-            const totalRowWidth = maxCols * dimW;
-            const offsetZ = Math.max(0, (CW - totalRowWidth) / 2);
+                for (let i = 0; i < candidatePoints.length; i++) {
+                    const pt = candidatePoints[i];
 
-            let maxItemX = currentStartX;
+                    // Test orientations
+                    for (const ori of orientations) {
+                        // Check container inner boundaries
+                        if (pt.x + ori.l > CL + 0.001) continue;
+                        if (pt.y + ori.h > CH + 0.001) continue;
+                        if (pt.z + ori.w > CW / 2 + 0.001) continue;
+                        if (pt.z < -CW / 2 - 0.001) continue;
 
-            // Pack this entire cargo item sequentially into its own dedicated block:
-            // Outer loop: row (X) moves forward towards the door from currentStartX
-            // Middle loop: layer (Y) stacks from floor (y=0) up to ceiling (y=CH)
-            // Inner loop: col (Z) fills across container width
-            const maxRows = Math.floor((CL - currentStartX + 0.001) / dimL);
+                        // Non-stackable constraint: must sit on floor
+                        if (!stackable && pt.y > 0.002) continue;
 
-            for (let row = 0; row < maxRows && placedCount < qty; row++) {
-                const x = currentStartX + row * dimL;
-                if (x + dimL > CL + 0.001) {
-                    break; // Container length limit reached
-                }
-
-                let rowPlacedAny = false;
-
-                for (let layer = 0; layer < maxLayers && placedCount < qty; layer++) {
-                    const y = layer * dimH;
-                    if (y + dimH > CH + 0.001) break;
-
-                    for (let col = 0; col < maxCols && placedCount < qty; col++) {
-                        if (placedCount >= qty) break;
-                        const z = -CW / 2 + offsetZ + col * dimW;
-
-                        // Check container payload limit
+                        // Payload limit check
                         if (totalPlacedWeight + unitWeight > spec.payload * 1.05) {
                             break;
                         }
 
-                        // Collision verification
-                        if (!this.checkCollision(x, y, z, dimL, dimH, dimW)) {
-                            const stepNumber = totalPlaced + 1;
-                            const placedBoxObj = this.placeBox(x, y, z, dimL, dimH, dimW, color, item.name, s, shapeType, stepNumber, unitWeight);
-                            this.placedBoxes.push({ x, y, z, l: dimL, h: dimH, w: dimW, weight: unitWeight });
-
-                            this.boxMeshes.push({
-                                step: stepNumber,
-                                mesh: placedBoxObj.mesh,
-                                edgeLines: placedBoxObj.edgeLines,
-                                name: item.name,
-                                x, y, z,
-                                l: dimL, h: dimH, w: dimW,
-                                weight: unitWeight,
-                                color: item.color,
-                                stop: item.stop || 'Stop 1'
-                            });
-
-                            placedCount++;
-                            totalPlaced++;
-                            totalPlacedVolume += (dimL * dimW * dimH);
-                            totalPlacedWeight += unitWeight;
-
-                            cogSumX += (x + dimL / 2) * unitWeight;
-                            cogSumY += (y + dimH / 2) * unitWeight;
-                            cogSumZ += (z + dimW / 2) * unitWeight;
-
-                            rowPlacedAny = true;
-                            if (x + dimL > maxItemX) {
-                                maxItemX = x + dimL;
-                            }
+                        // Collision check
+                        if (this.checkCollision(pt.x, pt.y, pt.z, ori.l, ori.h, ori.w)) {
+                            continue;
                         }
+
+                        // Support check (must sit on floor or securely on top of previous boxes - "gối đầu")
+                        if (!this.isSupported(pt.x, pt.y, pt.z, ori.l, ori.h, ori.w)) {
+                            continue;
+                        }
+
+                        // VALID POSITION FOUND: Place box!
+                        const stepNumber = totalPlaced + 1;
+                        const placedBoxObj = this.placeBox(pt.x, pt.y, pt.z, ori.l, ori.h, ori.w, color, item.name, s, shapeType, stepNumber, unitWeight);
+                        
+                        this.placedBoxes.push({
+                            x: pt.x, y: pt.y, z: pt.z,
+                            l: ori.l, h: ori.h, w: ori.w,
+                            weight: unitWeight,
+                            stackable: stackable
+                        });
+
+                        this.boxMeshes.push({
+                            step: stepNumber,
+                            mesh: placedBoxObj.mesh,
+                            edgeLines: placedBoxObj.edgeLines,
+                            name: item.name,
+                            x: pt.x, y: pt.y, z: pt.z,
+                            l: ori.l, h: ori.h, w: ori.w,
+                            weight: unitWeight,
+                            color: item.color,
+                            stop: item.stop || 'Stop 1'
+                        });
+
+                        placedCount++;
+                        totalPlaced++;
+                        totalPlacedVolume += (ori.l * ori.w * ori.h);
+                        totalPlacedWeight += unitWeight;
+
+                        cogSumX += (pt.x + ori.l / 2) * unitWeight;
+                        cogSumY += (pt.y + ori.h / 2) * unitWeight;
+                        cogSumZ += (pt.z + ori.w / 2) * unitWeight;
+
+                        // Remove used candidate point
+                        candidatePoints.splice(i, 1);
+
+                        // Generate new candidate points around the placed box
+                        this.generateCandidatePointsForBox(candidatePoints, pt.x, pt.y, pt.z, ori.l, ori.h, ori.w, CL, CW, CH);
+
+                        placedThisBox = true;
+                        break;
                     }
+
+                    if (placedThisBox) break;
                 }
 
-                if (!rowPlacedAny && placedCount >= qty) {
+                if (!placedThisBox) {
+                    // No valid space remains for this item in container
                     break;
                 }
-            }
-
-            // Once ALL units of this item are placed (or space runs out),
-            // the next cargo type begins immediately after this item's block along X!
-            if (placedCount > 0) {
-                currentStartX = maxItemX;
             }
         }
 
@@ -491,6 +480,85 @@ class ContainerSimulation {
             cogPos: { x: avgX.toFixed(2), y: avgY.toFixed(2), z: avgZ.toFixed(2) },
             fitsAll: (totalRequested === totalPlaced)
         };
+    }
+
+    // Physical support check: box at y > 0 must rest securely on floor or boxes below ("Gối đầu" vững chắc)
+    isSupported(x, y, z, l, h, w) {
+        if (y <= 0.002) return true; // Sits on container floor
+
+        let supportedArea = 0;
+        const boxBottomArea = l * w;
+        const eps = 0.008; // 8mm height tolerance
+
+        for (const b of this.placedBoxes) {
+            // Check if top of box b matches y
+            if (Math.abs((b.y + b.h) - y) < eps) {
+                // If box below is explicitly non-stackable, cannot place on it
+                if (b.stackable === false) {
+                    return false;
+                }
+
+                // Overlap rectangle in X-Z plane
+                const overlapX = Math.max(0, Math.min(x + l, b.x + b.l) - Math.max(x, b.x));
+                const overlapZ = Math.max(0, Math.min(z + w, b.z + b.w) - Math.max(z, b.z));
+                supportedArea += (overlapX * overlapZ);
+            }
+        }
+
+        // Require at least 40% of the bottom surface area to be supported
+        return (supportedArea >= boxBottomArea * 0.40);
+    }
+
+    addCandidatePoint(pts, x, y, z, CL, CW, CH) {
+        if (x < -0.001 || x > CL - 0.05) return;
+        if (y < -0.001 || y > CH - 0.05) return;
+        if (z < -CW / 2 - 0.001 || z > CW / 2 - 0.05) return;
+
+        const snapX = Math.round(x * 1000) / 1000;
+        const snapY = Math.round(y * 1000) / 1000;
+        const snapZ = Math.round(z * 1000) / 1000;
+
+        for (let i = 0; i < pts.length; i++) {
+            if (Math.abs(pts[i].x - snapX) < 0.005 &&
+                Math.abs(pts[i].y - snapY) < 0.005 &&
+                Math.abs(pts[i].z - snapZ) < 0.005) {
+                return;
+            }
+        }
+
+        pts.push({ x: snapX, y: snapY, z: snapZ });
+    }
+
+    generateCandidatePointsForBox(pts, x, y, z, l, h, w, CL, CW, CH) {
+        // 1. In front of the box at the same height
+        this.addCandidatePoint(pts, x + l, y, z, CL, CW, CH);
+        // 2. On top of the box
+        this.addCandidatePoint(pts, x, y + h, z, CL, CW, CH);
+        // 3. Beside the box to the right
+        this.addCandidatePoint(pts, x, y, z + w, CL, CW, CH);
+        // 4. In front of the box on the floor (y = 0)
+        this.addCandidatePoint(pts, x + l, 0, z, CL, CW, CH);
+        // 5. In front of the box on the floor at the left wall (z = -CW/2)
+        this.addCandidatePoint(pts, x + l, 0, -CW / 2, CL, CW, CH);
+        // 6. On top of the box at the left wall
+        this.addCandidatePoint(pts, x, y + h, -CW / 2, CL, CW, CH);
+        // 7. Top-front corner
+        this.addCandidatePoint(pts, x + l, y + h, z, CL, CW, CH);
+    }
+
+    sortCandidatePoints(pts) {
+        pts.sort((a, b) => {
+            // 1. Primary: X axis (fill from inside out, smallest X first to fill notches/gaps)
+            if (Math.abs(a.x - b.x) > 0.008) {
+                return a.x - b.x;
+            }
+            // 2. Secondary: Y axis (bottom to top, floor first)
+            if (Math.abs(a.y - b.y) > 0.008) {
+                return a.y - b.y;
+            }
+            // 3. Tertiary: Z axis (left to right)
+            return a.z - b.z;
+        });
     }
 
     checkCollision(x, y, z, l, h, w) {
