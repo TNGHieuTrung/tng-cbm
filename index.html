@@ -270,13 +270,14 @@
                             </div>
 
                             <div class="cargo-options">
-                                <div class="option-group">
-                                    <label data-i18n="app.cargo.rotation">Xoay</label>
-                                    <div class="rotation-buttons">
-                                        <button class="rot-btn active" title="Tự do"><i class="fas fa-sync-alt"></i></button>
-                                        <button class="rot-btn" title="Khóa"><i class="fas fa-lock"></i></button>
-                                    </div>
-                                    <span class="rot-label" data-i18n="app.cargo.rotFree">Chỉ ngang</span>
+                                <div class="option-group" style="min-width: 200px;">
+                                    <label data-i18n="app.cargo.rotation"><i class="fas fa-sync-alt"></i> Xoay chiều thùng</label>
+                                    <select class="cargo-rotation select-sm" style="width: 100%; font-weight: 500;">
+                                        <option value="fit" data-i18n="app.cargo.rotFit">🔄 Fit dọc & ngang cont (Tự do)</option>
+                                        <option value="garment" data-i18n="app.cargo.rotGarment">👔 Hàng may mặc (Hạn chế xoay - Tránh nhăn)</option>
+                                        <option value="locked" data-i18n="app.cargo.rotLocked">🔒 Khóa xoay (Cố định 1 chiều)</option>
+                                        <option value="all" data-i18n="app.cargo.rot3D">📦 Xoay 3D (Đa hướng)</option>
+                                    </select>
                                 </div>
                                 <div class="option-group">
                                     <label data-i18n="app.cargo.loadMethod">Phương pháp</label>
@@ -358,13 +359,14 @@
                             </div>
 
                             <div class="cargo-options">
-                                <div class="option-group">
-                                    <label data-i18n="app.cargo.rotation">Xoay</label>
-                                    <div class="rotation-buttons">
-                                        <button class="rot-btn active" title="Tự do"><i class="fas fa-sync-alt"></i></button>
-                                        <button class="rot-btn" title="Khóa"><i class="fas fa-lock"></i></button>
-                                    </div>
-                                    <span class="rot-label" data-i18n="app.cargo.rotFree">Chỉ ngang</span>
+                                <div class="option-group" style="min-width: 200px;">
+                                    <label data-i18n="app.cargo.rotation"><i class="fas fa-sync-alt"></i> Xoay chiều thùng</label>
+                                    <select class="cargo-rotation select-sm" style="width: 100%; font-weight: 500;">
+                                        <option value="fit" data-i18n="app.cargo.rotFit">🔄 Fit dọc & ngang cont (Tự do)</option>
+                                        <option value="garment" data-i18n="app.cargo.rotGarment">👔 Hàng may mặc (Hạn chế xoay - Tránh nhăn)</option>
+                                        <option value="locked" data-i18n="app.cargo.rotLocked">🔒 Khóa xoay (Cố định 1 chiều)</option>
+                                        <option value="all" data-i18n="app.cargo.rot3D">📦 Xoay 3D (Đa hướng)</option>
+                                    </select>
                                 </div>
                                 <div class="option-group">
                                     <label data-i18n="app.cargo.loadMethod">Phương pháp</label>
@@ -398,6 +400,7 @@
                                         <th data-i18n="app.table.totalWeight">Tổng KL</th>
                                         <th data-i18n="app.table.cbm">CBM</th>
                                         <th data-i18n="app.table.stackable">Chồng</th>
+                                        <th data-i18n="app.table.rotation">Xoay chiều</th>
                                         <th data-i18n="app.table.stop">Điểm dỡ</th>
                                         <th data-i18n="app.table.priority">Ưu tiên</th>
                                         <th style="width:70px;" data-i18n="app.table.actions">Xóa</th>
@@ -454,6 +457,13 @@
                             <span class="algo-card">
                                 <strong data-i18n="app.algo.easyLoad">Dễ bốc dỡ</strong>
                                 <small data-i18n="app.algo.easyLoadDesc">Ưu tiên thuận tiện bốc/dỡ hàng</small>
+                            </span>
+                        </label>
+                        <label class="algo-option">
+                            <input type="radio" name="algorithm" value="garment">
+                            <span class="algo-card">
+                                <strong data-i18n="app.algo.garment"><i class="fas fa-tshirt"></i> Hàng may mặc TNG</strong>
+                                <small data-i18n="app.algo.garmentDesc">Đồng nhất chiều thùng, hạn chế tối đa xoay để chống nhăn nhàu</small>
                             </span>
                         </label>
                         <label class="algo-option">

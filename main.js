@@ -222,12 +222,24 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // Rotation lock buttons
+        // Rotation selector
+        const rotSelect = card.querySelector('.cargo-rotation');
+        if (rotSelect) {
+            rotSelect.addEventListener('change', () => {
+                evaluateBestFitAndSync();
+                triggerLiveSimulation();
+            });
+        }
+
+        // Legacy rotation lock buttons (if present)
         const rotButtons = card.querySelectorAll('.rot-btn');
         rotButtons.forEach(btn => {
             btn.addEventListener('click', () => {
                 rotButtons.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
+                if (rotSelect) {
+                    rotSelect.value = btn.title.includes('Khóa') ? 'locked' : 'fit';
+                }
                 triggerLiveSimulation();
             });
         });
@@ -311,6 +323,12 @@ document.addEventListener('DOMContentLoaded', () => {
             colorInput.value = defaultColors[cardId % defaultColors.length];
         }
 
+        const origRot = cardToClone.querySelector('.cargo-rotation')?.value;
+        const cloneRot = clone.querySelector('.cargo-rotation');
+        if (cloneRot && origRot) {
+            cloneRot.value = origRot;
+        }
+
         cargoCardsContainer.appendChild(clone);
         setupCargoCardListeners(clone);
         updateOverallSummary();
@@ -343,6 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const wt = parseFloat(card.querySelector('.cargo-weight')?.value) || 10;
             const color = card.querySelector('.color-picker')?.value || '#dc2626';
             const stackChecked = card.querySelector('.checkbox-pill input')?.checked !== false;
+            const rotVal = card.querySelector('.cargo-rotation')?.value || 'fit';
             const currentStop = card.dataset.stop || 'Stop 1';
 
             const totalWt = (wt * qty).toLocaleString('en-US', { maximumFractionDigits: 1 });
@@ -363,6 +382,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td class="tbl-tot-cbm">${totalCbm}</td>
                 <td style="text-align:center;"><input type="checkbox" class="tbl-stack" ${stackChecked ? 'checked' : ''}></td>
                 <td>
+                    <select class="tbl-rotation select-sm" style="font-size:12px; padding:3px 6px;">
+                        <option value="fit" ${rotVal === 'fit' ? 'selected' : ''}>🔄 Fit dọc/ngang</option>
+                        <option value="garment" ${rotVal === 'garment' ? 'selected' : ''}>👔 May mặc (Hạn chế)</option>
+                        <option value="locked" ${rotVal === 'locked' ? 'selected' : ''}>🔒 Khóa xoay</option>
+                        <option value="all" ${rotVal === 'all' ? 'selected' : ''}>📦 Xoay 3D</option>
+                    </select>
+                </td>
+                <td>
                     <select class="tbl-stop">
                         <option value="Stop 1" ${currentStop === 'Stop 1' ? 'selected' : ''}>Stop 1 (Sâu nhất)</option>
                         <option value="Stop 2" ${currentStop === 'Stop 2' ? 'selected' : ''}>Stop 2</option>
@@ -382,6 +409,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     <button class="tbl-del-btn" title="Xóa dòng"><i class="fas fa-trash-alt"></i></button>
                 </td>
             `;
+
+            const rotSelect = tr.querySelector('.tbl-rotation');
+            if (rotSelect) {
+                rotSelect.addEventListener('change', () => {
+                    const cRot = card.querySelector('.cargo-rotation');
+                    if (cRot) cRot.value = rotSelect.value;
+                    evaluateBestFitAndSync();
+                });
+            }
 
             const stopSelect = tr.querySelector('.tbl-stop');
             if (stopSelect) {
@@ -532,8 +568,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const stackCheckbox = card.querySelector('.checkbox-pill input');
             const stackable = stackCheckbox ? stackCheckbox.checked : true;
 
-            const activeRotBtn = card.querySelector('.rot-btn.active');
-            const rotation = activeRotBtn && activeRotBtn.title.includes('Khóa') ? 'locked' : 'horizontal';
+            const rotSelect = card.querySelector('.cargo-rotation');
+            let rotation = rotSelect ? rotSelect.value : 'fit';
+            if (!rotSelect) {
+                const activeRotBtn = card.querySelector('.rot-btn.active');
+                rotation = activeRotBtn && activeRotBtn.title.includes('Khóa') ? 'locked' : 'fit';
+            }
 
             items.push({ name, width, length, height, qty, weight, color, type, stackable, rotation, stop: card.dataset.stop || 'Stop 1' });
         });

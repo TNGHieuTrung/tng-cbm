@@ -302,7 +302,14 @@ class ContainerSimulation {
 
         // Sort items for sequential loading based on algorithm & logistics rules
         const itemsCopy = cargoItems.map(item => ({ ...item }));
-        if (algorithm === 'stability') {
+        if (algorithm === 'garment') {
+            // Garment algorithm: default items to garment anti-wrinkle mode
+            itemsCopy.forEach(it => {
+                if (!it.rotation || it.rotation === 'horizontal' || it.rotation === 'fit') {
+                    it.rotation = 'garment';
+                }
+            });
+        } else if (algorithm === 'stability') {
             // Stability: Heaviest total weight cargo first (deepest inside container)
             itemsCopy.sort((a, b) => ((b.weight || 0) * (b.qty || 1)) - ((a.weight || 0) * (a.qty || 1)));
         } else if (algorithm === 'max-volume') {
@@ -341,15 +348,25 @@ class ContainerSimulation {
             const color = new THREE.Color(item.color || '#dc2626');
             const shapeType = item.type || 'box';
             const stackable = item.stackable !== false;
-            const rotMode = item.rotation || 'horizontal';
+            const rotMode = (algorithm === 'garment' && (!item.rotation || item.rotation === 'horizontal' || item.rotation === 'fit'))
+                ? 'garment'
+                : (item.rotation || 'fit');
 
             let placedCount = 0;
 
             // Determine orientations
-            const orientations = [];
-            orientations.push({ l: baseL, h: baseH, w: baseW });
+            const primaryOri = { l: baseL, h: baseH, w: baseW, isPrimary: true };
+            const rotOri = { l: baseW, h: baseH, w: baseL, isPrimary: false };
+
+            const orientations = [primaryOri];
             if (rotMode !== 'locked' && Math.abs(baseL - baseW) > 0.01) {
-                orientations.push({ l: baseW, h: baseH, w: baseL });
+                orientations.push(rotOri);
+            }
+            if (rotMode === 'all' || rotMode === '3d') {
+                orientations.push({ l: baseL, h: baseW, w: baseH, isPrimary: false });
+                orientations.push({ l: baseW, h: baseL, w: baseH, isPrimary: false });
+                orientations.push({ l: baseH, h: baseL, w: baseW, isPrimary: false });
+                orientations.push({ l: baseH, h: baseW, w: baseL, isPrimary: false });
             }
 
             // Pack every unit of this item sequentially
@@ -359,78 +376,84 @@ class ContainerSimulation {
                 // Sort candidate points: smallest X first (fill notches/step-downs left by previous items FIRST), then Y (bottom-up), then Z (left-to-right)
                 this.sortCandidatePoints(candidatePoints);
 
-                for (let i = 0; i < candidatePoints.length; i++) {
-                    const pt = candidatePoints[i];
-
-                    // Test orientations
-                    for (const ori of orientations) {
-                        // Check container inner boundaries
-                        if (pt.x + ori.l > CL + 0.001) continue;
-                        if (pt.y + ori.h > CH + 0.001) continue;
-                        if (pt.z + ori.w > CW / 2 + 0.001) continue;
-                        if (pt.z < -CW / 2 - 0.001) continue;
-
-                        // Non-stackable constraint: must sit on floor
-                        if (!stackable && pt.y > 0.002) continue;
-
-                        // Payload limit check
-                        if (totalPlacedWeight + unitWeight > spec.payload * 1.05) {
+                if (rotMode === 'garment') {
+                    // GARMENT MODE (HÀNG MAY MẶC):
+                    // Hạn chế xoay tối đa để chống nhăn nhàu áo quần!
+                    // Pass 1: Quét toàn bộ candidatePoints CHỈ DÙNG hướng chuẩn (primaryOri).
+                    // Giữ đồng nhất 100% hướng cho thân container.
+                    for (let i = 0; i < candidatePoints.length; i++) {
+                        const pt = candidatePoints[i];
+                        if (this.canPlaceBox(pt, primaryOri, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec)) {
+                            this.doPlaceBox(pt, primaryOri, color, item, s, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i);
+                            placedCount++;
+                            totalPlaced++;
+                            totalPlacedVolume += (primaryOri.l * primaryOri.w * primaryOri.h);
+                            totalPlacedWeight += unitWeight;
+                            cogSumX += (pt.x + primaryOri.l / 2) * unitWeight;
+                            cogSumY += (pt.y + primaryOri.h / 2) * unitWeight;
+                            cogSumZ += (pt.z + primaryOri.w / 2) * unitWeight;
+                            placedThisBox = true;
                             break;
                         }
-
-                        // Collision check
-                        if (this.checkCollision(pt.x, pt.y, pt.z, ori.l, ori.h, ori.w)) {
-                            continue;
-                        }
-
-                        // Support check (must sit on floor or securely on top of previous boxes - "gối đầu")
-                        if (!this.isSupported(pt.x, pt.y, pt.z, ori.l, ori.h, ori.w)) {
-                            continue;
-                        }
-
-                        // VALID POSITION FOUND: Place box!
-                        const stepNumber = totalPlaced + 1;
-                        const placedBoxObj = this.placeBox(pt.x, pt.y, pt.z, ori.l, ori.h, ori.w, color, item.name, s, shapeType, stepNumber, unitWeight);
-                        
-                        this.placedBoxes.push({
-                            x: pt.x, y: pt.y, z: pt.z,
-                            l: ori.l, h: ori.h, w: ori.w,
-                            weight: unitWeight,
-                            stackable: stackable
-                        });
-
-                        this.boxMeshes.push({
-                            step: stepNumber,
-                            mesh: placedBoxObj.mesh,
-                            edgeLines: placedBoxObj.edgeLines,
-                            name: item.name,
-                            x: pt.x, y: pt.y, z: pt.z,
-                            l: ori.l, h: ori.h, w: ori.w,
-                            weight: unitWeight,
-                            color: item.color,
-                            stop: item.stop || 'Stop 1'
-                        });
-
-                        placedCount++;
-                        totalPlaced++;
-                        totalPlacedVolume += (ori.l * ori.w * ori.h);
-                        totalPlacedWeight += unitWeight;
-
-                        cogSumX += (pt.x + ori.l / 2) * unitWeight;
-                        cogSumY += (pt.y + ori.h / 2) * unitWeight;
-                        cogSumZ += (pt.z + ori.w / 2) * unitWeight;
-
-                        // Remove used candidate point
-                        candidatePoints.splice(i, 1);
-
-                        // Generate new candidate points around the placed box
-                        this.generateCandidatePointsForBox(candidatePoints, pt.x, pt.y, pt.z, ori.l, ori.h, ori.w, CL, CW, CH);
-
-                        placedThisBox = true;
-                        break;
                     }
 
-                    if (placedThisBox) break;
+                    // Pass 2: CHỈ KHI hướng chuẩn KHÔNG THỂ đặt được ở bất kỳ điểm nào (ví dụ: đã chạm vách cont hoặc còn khe hẹp ở mép),
+                    // mới cho phép dùng hướng xoay (rotOri) để lấp đầy khe hở, không lãng phí thể tích cont!
+                    if (!placedThisBox && Math.abs(baseL - baseW) > 0.01) {
+                        for (let i = 0; i < candidatePoints.length; i++) {
+                            const pt = candidatePoints[i];
+                            if (this.canPlaceBox(pt, rotOri, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec)) {
+                                this.doPlaceBox(pt, rotOri, color, item, s, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i);
+                                placedCount++;
+                                totalPlaced++;
+                                totalPlacedVolume += (rotOri.l * rotOri.w * rotOri.h);
+                                totalPlacedWeight += unitWeight;
+                                cogSumX += (pt.x + rotOri.l / 2) * unitWeight;
+                                cogSumY += (pt.y + rotOri.h / 2) * unitWeight;
+                                cogSumZ += (pt.z + rotOri.w / 2) * unitWeight;
+                                placedThisBox = true;
+                                break;
+                            }
+                        }
+                    }
+                } else if (rotMode === 'locked') {
+                    // LOCKED MODE: Cố định 100% theo hướng chuẩn, tuyệt đối không xoay
+                    for (let i = 0; i < candidatePoints.length; i++) {
+                        const pt = candidatePoints[i];
+                        if (this.canPlaceBox(pt, primaryOri, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec)) {
+                            this.doPlaceBox(pt, primaryOri, color, item, s, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i);
+                            placedCount++;
+                            totalPlaced++;
+                            totalPlacedVolume += (primaryOri.l * primaryOri.w * primaryOri.h);
+                            totalPlacedWeight += unitWeight;
+                            cogSumX += (pt.x + primaryOri.l / 2) * unitWeight;
+                            cogSumY += (pt.y + primaryOri.h / 2) * unitWeight;
+                            cogSumZ += (pt.z + primaryOri.w / 2) * unitWeight;
+                            placedThisBox = true;
+                            break;
+                        }
+                    }
+                } else {
+                    // FIT MODE / FREE ROTATION (Fit vừa dọc & ngang cont):
+                    // Thử linh hoạt các hướng ở mỗi điểm đặt để lấp đầy cont tối đa
+                    for (let i = 0; i < candidatePoints.length; i++) {
+                        const pt = candidatePoints[i];
+                        for (const ori of orientations) {
+                            if (this.canPlaceBox(pt, ori, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec)) {
+                                this.doPlaceBox(pt, ori, color, item, s, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i);
+                                placedCount++;
+                                totalPlaced++;
+                                totalPlacedVolume += (ori.l * ori.w * ori.h);
+                                totalPlacedWeight += unitWeight;
+                                cogSumX += (pt.x + ori.l / 2) * unitWeight;
+                                cogSumY += (pt.y + ori.h / 2) * unitWeight;
+                                cogSumZ += (pt.z + ori.w / 2) * unitWeight;
+                                placedThisBox = true;
+                                break;
+                            }
+                        }
+                        if (placedThisBox) break;
+                    }
                 }
 
                 if (!placedThisBox) {
@@ -480,6 +503,50 @@ class ContainerSimulation {
             cogPos: { x: avgX.toFixed(2), y: avgY.toFixed(2), z: avgZ.toFixed(2) },
             fitsAll: (totalRequested === totalPlaced)
         };
+    }
+
+    // Helper: Validates if a box can physically be placed at pt with given orientation
+    canPlaceBox(pt, ori, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec) {
+        if (pt.x + ori.l > CL + 0.001) return false;
+        if (pt.y + ori.h > CH + 0.001) return false;
+        if (pt.z + ori.w > CW / 2 + 0.001) return false;
+        if (pt.z < -CW / 2 - 0.001) return false;
+
+        if (!stackable && pt.y > 0.002) return false;
+        if (totalPlacedWeight + unitWeight > spec.payload * 1.05) return false;
+
+        if (this.checkCollision(pt.x, pt.y, pt.z, ori.l, ori.h, ori.w)) return false;
+        if (!this.isSupported(pt.x, pt.y, pt.z, ori.l, ori.h, ori.w)) return false;
+
+        return true;
+    }
+
+    // Helper: Places box in 3D scene, adds to placedBoxes and meshes, updates candidate points
+    doPlaceBox(pt, ori, color, item, s, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, ptIndex) {
+        const stepNumber = this.placedBoxes.length + 1;
+        const placedBoxObj = this.placeBox(pt.x, pt.y, pt.z, ori.l, ori.h, ori.w, color, item.name, s, shapeType, stepNumber, unitWeight);
+
+        this.placedBoxes.push({
+            x: pt.x, y: pt.y, z: pt.z,
+            l: ori.l, h: ori.h, w: ori.w,
+            weight: unitWeight,
+            stackable: stackable
+        });
+
+        this.boxMeshes.push({
+            step: stepNumber,
+            mesh: placedBoxObj.mesh,
+            edgeLines: placedBoxObj.edgeLines,
+            name: item.name,
+            x: pt.x, y: pt.y, z: pt.z,
+            l: ori.l, h: ori.h, w: ori.w,
+            weight: unitWeight,
+            color: item.color,
+            stop: item.stop || 'Stop 1'
+        });
+
+        candidatePoints.splice(ptIndex, 1);
+        this.generateCandidatePointsForBox(candidatePoints, pt.x, pt.y, pt.z, ori.l, ori.h, ori.w, CL, CW, CH);
     }
 
     // Physical support check: box at y > 0 must rest securely on floor or boxes below ("Gối đầu" vững chắc, triệt tiêu khe hở khoảng trống)
