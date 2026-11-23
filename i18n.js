@@ -36,6 +36,7 @@ const translations = {
         'app.bestFit.badge': 'TỐI ƯU',
         'app.bestFit.applyBtn': 'Áp dụng',
         'app.equipment.title': 'Chọn thiết bị vận chuyển',
+        'app.equipment.45hc': "45' High Cube",
         'app.equipment.truck': 'Xe tải',
         'app.equipment.custom': 'Tùy chỉnh',
         'app.equipment.internal': 'Kích thước nội bộ:',
@@ -142,6 +143,12 @@ const translations = {
         'sim.result.payload': 'Tải trọng tối đa cho phép',
         'sim.result.utilization': 'Tỉ lệ lấp đầy thể tích',
         'sim.result.cog': 'Đánh giá trọng tâm (CoG)',
+        'sim.containersList': 'Danh sách Container:',
+        'sim.addCont': '+ Thêm Container',
+        'sim.autoSplit': '⚡ Tự động phân bổ vào nhiều Cont',
+        'sim.contDelete': 'Xóa container',
+        'sim.contFull': 'Đầy',
+        'app.bestFit.splitBtn': '⚡ Thêm & Phân bổ Cont',
 
         // CBM Calculator
         'cbm.title': 'Máy tính CBM (Thể tích khối & Trọng lượng tính cước)',
@@ -252,6 +259,7 @@ const translations = {
         'app.bestFit.badge': 'BEST FIT',
         'app.bestFit.applyBtn': 'Apply',
         'app.equipment.title': 'Select Transport Equipment',
+        'app.equipment.45hc': "45' High Cube",
         'app.equipment.truck': 'Truck',
         'app.equipment.custom': 'Custom',
         'app.equipment.internal': 'Internal Dimensions:',
@@ -358,6 +366,12 @@ const translations = {
         'sim.result.payload': 'Max Allowable Payload',
         'sim.result.utilization': 'Space Utilization',
         'sim.result.cog': 'Center of Gravity (CoG)',
+        'sim.containersList': 'Containers List:',
+        'sim.addCont': '+ Add Container',
+        'sim.autoSplit': '⚡ Auto Allocate Containers',
+        'sim.contDelete': 'Delete container',
+        'sim.contFull': 'Full',
+        'app.bestFit.splitBtn': '⚡ Auto Allocate Containers',
 
         // CBM Calculator
         'cbm.title': 'CBM Calculator (Cubic Volume & Freight Weight)',

@@ -46,15 +46,15 @@ document.addEventListener('DOMContentLoaded', () => {
             maxW: 2.352,
             maxH: 2.698
         },
-        'truck': {
-            dimStr: '13.600m × 2.480m × 2.700m',
-            payload: '24,000 kg',
-            label: 'Xe tải / Truck (13.6m)',
+        '45hc': {
+            dimStr: '13.556m × 2.352m × 2.698m',
+            payload: '27,800 kg',
+            label: "45' High Cube (45HC)",
             maxVol: 86.0,
-            usableVol: 78.0,
-            maxL: 13.600,
-            maxW: 2.480,
-            maxH: 2.700
+            usableVol: 76.5,
+            maxL: 13.556,
+            maxW: 2.352,
+            maxH: 2.698
         },
         'custom': {
             dimStr: '6.000m × 2.400m × 2.400m',
@@ -78,6 +78,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const bestFitBanner = document.getElementById('bestFitBanner');
     const bestFitMsg = document.getElementById('bestFitMsg');
     const btnApplyFit = document.getElementById('btnApplyFit');
+    const btnAutoSplitBanner = document.getElementById('btnAutoSplitBanner');
+    const btnAddCont = document.getElementById('btnAddCont');
+    const btnAutoSplit = document.getElementById('btnAutoSplit');
+    const containerTabsBar = document.getElementById('containerTabsBar');
+    const containerTabsList = document.getElementById('containerTabsList');
+
+    let activeContainers = ['20dc'];
+    window.simulation = simulation;
 
     function selectEquipment(eqKey, isManual = false) {
         if (!equipmentData[eqKey]) return;
@@ -88,6 +96,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         selectedEquipment = eqKey;
+        if (activeContainers.length <= 1) {
+            activeContainers = [eqKey];
+        }
 
         eqButtons.forEach(b => {
             if (b.getAttribute('data-equipment') === eqKey) {
@@ -621,11 +632,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 msg = lang === 'vi'
                     ? `Đề xuất tối ưu: <span class="fit-highlight">40' High Cube (40HC)</span> — Chiều cao kiện hàng (${(maxH*100).toFixed(0)}cm) hoặc thể tích (${totalVol.toFixed(1)} m³) phù hợp nhất với cont 40' cao!`
                     : `Optimal Recommendation: <span class="fit-highlight">40' High Cube (40HC)</span> — Cargo height (${(maxH*100).toFixed(0)}cm) or volume (${totalVol.toFixed(1)} m³) is ideal for 40' High Cube!`;
-            } else if (totalVol <= 78.0 && totalWt <= 24000) {
-                recommended = 'truck';
+            } else if (totalVol <= 76.5 && totalWt <= 27800 && maxL <= 13.55) {
+                recommended = '45hc';
                 msg = lang === 'vi'
-                    ? `Đề xuất tối ưu: <span class="fit-highlight">Xe tải đường bộ (Truck 13.6m)</span> — Khối tích lớn (${totalVol.toFixed(1)} m³), tối ưu cho phương tiện vận tải đường bộ.`
-                    : `Optimal Recommendation: <span class="fit-highlight">Truck (13.6m)</span> — High cargo volume (${totalVol.toFixed(1)} m³), optimized for 13.6m road transport.`;
+                    ? `Đề xuất tối ưu: <span class="fit-highlight">Container 45' High Cube (45HC)</span> — Khối tích lớn (${totalVol.toFixed(1)} m³, dài ${maxL.toFixed(2)}m), vừa vặn 100% trong cont 45ft!`
+                    : `Optimal Recommendation: <span class="fit-highlight">45' High Cube Container (45HC)</span> — High cargo volume (${totalVol.toFixed(1)} m³, length ${maxL.toFixed(2)}m), fits 100% in 45HC!`;
             } else {
                 // Multi-container requirement
                 numContainers = Math.ceil(Math.max(totalVol / 65, totalWt / 26000));
@@ -656,8 +667,15 @@ document.addEventListener('DOMContentLoaded', () => {
             bestFitMsg.innerHTML = bestInfo.msg;
             if (bestInfo.isOversized) {
                 bestFitBanner.classList.add('warning');
+                if (btnAutoSplitBanner) {
+                    btnAutoSplitBanner.style.display = 'inline-block';
+                    btnAutoSplitBanner.textContent = document.documentElement.lang === 'vi'
+                        ? `⚡ Phân bổ ${bestInfo.numContainers} Cont`
+                        : `⚡ Auto Split ${bestInfo.numContainers} Conts`;
+                }
             } else {
                 bestFitBanner.classList.remove('warning');
+                if (btnAutoSplitBanner) btnAutoSplitBanner.style.display = 'none';
             }
         }
 
@@ -688,9 +706,86 @@ document.addEventListener('DOMContentLoaded', () => {
         liveSimTimeout = setTimeout(() => {
             const cargoItems = getCargoData();
             const selectedAlgo = document.querySelector('input[name="algorithm"]:checked')?.value || 'best-balance';
-            const result = simulation.packCargo(cargoItems, selectedAlgo);
-            updateUIWithSimulationResult(result);
+            if (!activeContainers || activeContainers.length === 0) {
+                activeContainers = [selectedEquipment || '20dc'];
+            }
+            const result = simulation.packCargo(cargoItems, selectedAlgo, activeContainers);
+            renderContainerTabs(result);
+            updateUIWithSimulationResult(result.activeContainerStats || result);
         }, 150);
+    }
+
+    function renderContainerTabs(simResult) {
+        if (!containerTabsList || !containerTabsBar) return;
+
+        // Container Tabs bar is always visible so user can see container status and click "+ Thêm cont" anytime
+        containerTabsBar.style.display = 'flex';
+
+        if (btnAutoSplit) {
+            const hasOverflow = (simResult && simResult.totalUnplaced > 0);
+            btnAutoSplit.style.display = (hasOverflow || activeContainers.length > 1) ? 'inline-flex' : 'none';
+        }
+
+        containerTabsList.innerHTML = '';
+        activeContainers.forEach((eqKey, idx) => {
+            const data = equipmentData[eqKey] || equipmentData['40hc'];
+            const contStats = (simResult && simResult.containers && simResult.containers[idx]) || null;
+            const util = contStats ? contStats.utilization : '0.0';
+            const isActive = idx === (simulation ? simulation.activeContainerIdx : 0);
+
+            const btn = document.createElement('button');
+            btn.className = `cont-tab-btn ${isActive ? 'active' : ''}`;
+            btn.dataset.contIndex = idx;
+            btn.innerHTML = `
+                <span><i class="fas fa-box"></i> Cont ${idx + 1} (${eqKey.toUpperCase()})</span>
+                <span class="cont-tab-badge">${util}%</span>
+                ${activeContainers.length > 1 ? `<i class="fas fa-times-circle cont-tab-del" data-del-index="${idx}" title="Xóa Container này"></i>` : ''}
+            `;
+
+            btn.addEventListener('click', (e) => {
+                if (e.target.classList.contains('cont-tab-del')) {
+                    e.stopPropagation();
+                    const delIdx = parseInt(e.target.getAttribute('data-del-index'));
+                    if (activeContainers.length > 1) {
+                        activeContainers.splice(delIdx, 1);
+                        triggerLiveSimulation();
+                    }
+                    return;
+                }
+                if (simulation) {
+                    const stats = simulation.showContainer(idx);
+                    document.querySelectorAll('.cont-tab-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    if (simEquipmentLabel) simEquipmentLabel.textContent = `${data.label} (Cont ${idx + 1})`;
+                    const hudContainerTitle = document.getElementById('hudContainerTitle');
+                    if (hudContainerTitle) hudContainerTitle.textContent = `Container ${idx + 1} (${data.label.split(' ')[0]})`;
+                    if (stats) updateUIWithSimulationResult(stats);
+                }
+            });
+
+            containerTabsList.appendChild(btn);
+        });
+    }
+
+    function handleAutoSplit() {
+        const cargoItems = getCargoData();
+        const fit = evaluateBestFit(cargoItems);
+        const needed = Math.max(2, fit.numContainers || Math.ceil(fit.totalVol / 68.5));
+        activeContainers = Array(needed).fill(selectedEquipment || '40hc');
+        triggerLiveSimulation();
+        if (containerTabsBar) {
+            containerTabsBar.style.display = 'flex';
+            containerTabsBar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    if (btnAutoSplit) btnAutoSplit.addEventListener('click', handleAutoSplit);
+    if (btnAutoSplitBanner) btnAutoSplitBanner.addEventListener('click', handleAutoSplit);
+    if (btnAddCont) {
+        btnAddCont.addEventListener('click', () => {
+            activeContainers.push(selectedEquipment || '40hc');
+            triggerLiveSimulation();
+        });
     }
 
     function updateUIWithSimulationResult(result) {
@@ -1359,7 +1454,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateBar('bar20dc', 'stat20dc', 33.2, 28200, "20DC");
         updateBar('bar40dc', 'stat40dc', 67.7, 26680, "40DC");
         updateBar('bar40hc', 'stat40hc', 76.3, 26460, "40HC");
-        updateBar('barTruck', 'statTruck', 86.0, 24000, "Truck");
+        updateBar('bar45hc', 'stat45hc', 86.0, 27800, "45HC");
     }
 
     if (cbmTableBody) {

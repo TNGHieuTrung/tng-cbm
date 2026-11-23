@@ -35,12 +35,14 @@ class ContainerSimulation {
             '20dc': { l: 5.898, w: 2.352, h: 2.393, name: "20' Dry Container (20DC)", payload: 28200 },
             '40dc': { l: 12.032, w: 2.352, h: 2.393, name: "40' Dry Container (40DC)", payload: 26680 },
             '40hc': { l: 12.032, w: 2.352, h: 2.698, name: "40' High Cube (40HC)", payload: 26460 },
-            'truck': { l: 13.6, w: 2.48, h: 2.7, name: "Xe tải / Truck", payload: 24000 },
+            '45hc': { l: 13.556, w: 2.352, h: 2.698, name: "45' High Cube (45HC)", payload: 27800 },
             'custom': { l: 6.0, w: 2.4, h: 2.4, name: "Tùy chỉnh / Custom", payload: 20000 }
         };
 
         this.currentEquipment = '20dc';
         this.scale = 40; // 1m = 40 units in scene
+        this.multiContainerData = [];
+        this.activeContainerIdx = 0;
 
         this.init();
     }
@@ -279,28 +281,8 @@ class ContainerSimulation {
         }
     }
 
-    // ===== High-Precision 3D Bin-Packing Algorithm with Orientation, Sequential SKU Packing & Seamless Interlocking ("Gối đầu") =====
-    packCargo(cargoItems, algorithm = 'best-balance') {
-        this.clearCargo();
-
-        const spec = this.containerSpecs[this.currentEquipment];
-        const s = this.scale;
-        const CL = spec.l, CW = spec.w, CH = spec.h;
-
-        this.cargoGroup = new THREE.Group();
-        this.placedBoxes = [];
-        this.boxMeshes = [];
-
-        let totalRequested = 0;
-        let totalPlaced = 0;
-        let totalPlacedVolume = 0;
-        let totalPlacedWeight = 0;
-
-        let cogSumX = 0;
-        let cogSumY = 0;
-        let cogSumZ = 0;
-
-        // Sort items for sequential loading based on algorithm & logistics rules
+    // Helper: Sort items for sequential loading based on algorithm & logistics rules
+    sortCargoItemsByAlgorithm(cargoItems, algorithm) {
         const itemsCopy = cargoItems.map(item => ({ ...item }));
         if (algorithm === 'garment') {
             // Garment algorithm: default items to garment anti-wrinkle mode
@@ -331,21 +313,94 @@ class ContainerSimulation {
                 return 0; // maintain user card / table order
             });
         }
+        return itemsCopy;
+    }
 
-        // Candidate Points system for seamless 3D interlocking ("Gối đầu" tại điểm giao nhau)
-        const candidatePoints = [
-            { x: 0, y: 0, z: -CW / 2 }
-        ];
+    // ===== High-Precision 3D Bin-Packing Algorithm with Orientation, Sequential SKU Packing & Multi-Container Support =====
+    packCargo(cargoItems, algorithm = 'best-balance', containerTypesList = null) {
+        const contList = (containerTypesList && containerTypesList.length > 0)
+            ? containerTypesList
+            : [this.currentEquipment];
 
-        for (const item of itemsCopy) {
-            const qty = parseInt(item.qty) || 0;
-            totalRequested += qty;
+        return this.packMultiContainers(cargoItems, algorithm, contList);
+    }
+
+    packMultiContainers(cargoItems, algorithm = 'best-balance', containerTypesList = ['40hc']) {
+        this.clearCargo();
+        this.multiContainerData = [];
+        this.activeContainerIdx = 0;
+
+        const itemsSorted = this.sortCargoItemsByAlgorithm(cargoItems, algorithm);
+        let remainingCargo = itemsSorted.map(it => ({
+            ...it,
+            remainingQty: parseInt(it.qty) || 0
+        }));
+        const totalRequested = cargoItems.reduce((acc, it) => acc + (parseInt(it.qty) || 0), 0);
+
+        containerTypesList.forEach((contType, idx) => {
+            const spec = this.containerSpecs[contType] || this.containerSpecs['40hc'];
+            this.currentEquipment = contType;
+
+            // Pack single container from remaining unplaced items
+            const packRes = this.packSingleContainerInternal(remainingCargo, spec, algorithm);
+
+            this.multiContainerData.push({
+                index: idx,
+                type: contType,
+                name: spec.name,
+                placedBoxes: packRes.placedBoxes,
+                boxMeshesData: packRes.boxMeshesData,
+                stats: packRes.stats,
+                cogPos: packRes.cogPos
+            });
+
+            // Feed unplaced items to next container
+            remainingCargo = packRes.unplacedItems;
+        });
+
+        // Display Container 1 in 3D canvas by default
+        this.showContainer(0);
+
+        const totalPlaced = this.multiContainerData.reduce((acc, c) => acc + c.stats.placed, 0);
+        const totalUnplaced = Math.max(0, totalRequested - totalPlaced);
+
+        return {
+            containers: this.multiContainerData.map(c => c.stats),
+            activeContainerStats: this.multiContainerData[0].stats,
+            totalPlaced: totalPlaced,
+            totalRequested: totalRequested,
+            totalUnplaced: totalUnplaced,
+            fitsAll: (totalUnplaced === 0),
+            multiMode: (containerTypesList.length > 1)
+        };
+    }
+
+    packSingleContainerInternal(cargoItems, spec, algorithm) {
+        const CL = spec.l, CW = spec.w, CH = spec.h;
+        this.placedBoxes = []; // Temporary for collision / support validation
+
+        const boxMeshesData = [];
+        const candidatePoints = [{ x: 0, y: 0, z: -CW / 2 }];
+
+        let totalPlaced = 0;
+        let totalPlacedVolume = 0;
+        let totalPlacedWeight = 0;
+
+        let cogSumX = 0;
+        let cogSumY = 0;
+        let cogSumZ = 0;
+
+        const unplacedItems = [];
+
+        for (const item of cargoItems) {
+            const qty = parseInt(item.remainingQty !== undefined ? item.remainingQty : item.qty) || 0;
+            if (qty <= 0) continue;
 
             const baseW = (parseFloat(item.width) || 50) / 100;   // m
             const baseL = (parseFloat(item.length) || 60) / 100;  // m
             const baseH = (parseFloat(item.height) || 40) / 100;  // m
             const unitWeight = parseFloat(item.weight) || 10;
-            const color = new THREE.Color(item.color || '#dc2626');
+            const color = item.color || '#dc2626';
             const shapeType = item.type || 'box';
             const stackable = item.stackable !== false;
             const rotMode = (algorithm === 'garment' && (!item.rotation || item.rotation === 'horizontal' || item.rotation === 'fit'))
@@ -354,7 +409,6 @@ class ContainerSimulation {
 
             let placedCount = 0;
 
-            // Determine orientations
             const primaryOri = { l: baseL, h: baseH, w: baseW, isPrimary: true };
             const rotOri = { l: baseW, h: baseH, w: baseL, isPrimary: false };
 
@@ -369,26 +423,15 @@ class ContainerSimulation {
                 orientations.push({ l: baseH, h: baseW, w: baseL, isPrimary: false });
             }
 
-            // Pack every unit of this item sequentially
             while (placedCount < qty) {
                 let placedThisBox = false;
-
-                // Sort candidate points: smallest X first (fill notches/step-downs left by previous items FIRST), then Y (bottom-up), then Z (left-to-right)
                 this.sortCandidatePoints(candidatePoints);
 
                 if (rotMode === 'garment') {
-                    // GARMENT MODE (HÀNG MAY MẶC):
-                    // Ưu tiên cao nhất hướng chuẩn (primaryOri) để giữ thẳng nếp gấp áo quần, chống nhăn nhàu.
-                    // Nhưng tại mỗi điểm ứng viên (quét từ trong ra ngoài theo thứ tự X nhỏ nhất trước):
-                    // 1. Thử hướng chuẩn primaryOri. Nếu vừa -> Đặt ngay!
-                    // 2. Nếu tại điểm đó hướng chuẩn KHÔNG VỪA (do là hốc khuyết, bậc giật cấp, khe hẹp):
-                    //    -> Thử xoay rotOri để lấp đầy hốc khuyết ngay tại chỗ, TRÁNH BỎ QUA ĐIỂM ĐẶT RỒI NHẢY RA NGOÀI ĐỂ LẠI LỖ HỔNG!
                     for (let i = 0; i < candidatePoints.length; i++) {
                         const pt = candidatePoints[i];
-                        
-                        // Thử 1: Chiều chuẩn (ưu tiên chống nhăn)
                         if (this.canPlaceBox(pt, primaryOri, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec)) {
-                            this.doPlaceBox(pt, primaryOri, color, item, s, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i);
+                            this.doRecordBoxData(pt, primaryOri, color, item, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i, boxMeshesData);
                             placedCount++;
                             totalPlaced++;
                             totalPlacedVolume += (primaryOri.l * primaryOri.w * primaryOri.h);
@@ -399,10 +442,8 @@ class ContainerSimulation {
                             placedThisBox = true;
                             break;
                         }
-
-                        // Thử 2: Nếu chiều chuẩn không vừa ở hốc này, cho phép xoay (rotOri) để lấp kín khoảng trống
                         if (Math.abs(baseL - baseW) > 0.01 && this.canPlaceBox(pt, rotOri, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec)) {
-                            this.doPlaceBox(pt, rotOri, color, item, s, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i);
+                            this.doRecordBoxData(pt, rotOri, color, item, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i, boxMeshesData);
                             placedCount++;
                             totalPlaced++;
                             totalPlacedVolume += (rotOri.l * rotOri.w * rotOri.h);
@@ -415,11 +456,10 @@ class ContainerSimulation {
                         }
                     }
                 } else if (rotMode === 'locked') {
-                    // LOCKED MODE: Cố định 100% theo hướng chuẩn, tuyệt đối không xoay
                     for (let i = 0; i < candidatePoints.length; i++) {
                         const pt = candidatePoints[i];
                         if (this.canPlaceBox(pt, primaryOri, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec)) {
-                            this.doPlaceBox(pt, primaryOri, color, item, s, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i);
+                            this.doRecordBoxData(pt, primaryOri, color, item, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i, boxMeshesData);
                             placedCount++;
                             totalPlaced++;
                             totalPlacedVolume += (primaryOri.l * primaryOri.w * primaryOri.h);
@@ -432,13 +472,11 @@ class ContainerSimulation {
                         }
                     }
                 } else {
-                    // FIT MODE / FREE ROTATION (Fit vừa dọc & ngang cont):
-                    // Thử linh hoạt các hướng ở mỗi điểm đặt để lấp đầy cont tối đa
                     for (let i = 0; i < candidatePoints.length; i++) {
                         const pt = candidatePoints[i];
                         for (const ori of orientations) {
                             if (this.canPlaceBox(pt, ori, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec)) {
-                                this.doPlaceBox(pt, ori, color, item, s, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i);
+                                this.doRecordBoxData(pt, ori, color, item, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i, boxMeshesData);
                                 placedCount++;
                                 totalPlaced++;
                                 totalPlacedVolume += (ori.l * ori.w * ori.h);
@@ -454,20 +492,19 @@ class ContainerSimulation {
                     }
                 }
 
-                if (!placedThisBox) {
-                    // No valid space remains for this item in container
-                    break;
-                }
+                if (!placedThisBox) break;
+            }
+
+            const unplaced = qty - placedCount;
+            if (unplaced > 0) {
+                unplacedItems.push({ ...item, remainingQty: unplaced });
             }
         }
-
-        this.scene.add(this.cargoGroup);
 
         const containerVolume = CL * CW * CH;
         const utilization = ((totalPlacedVolume / containerVolume) * 100).toFixed(1);
         const weightUtilization = ((totalPlacedWeight / spec.payload) * 100).toFixed(1);
 
-        // CoG Analysis & 3D Marker
         let cogText = 'Cân đối (Tâm cont)';
         const avgX = totalPlacedWeight > 0 ? (cogSumX / totalPlacedWeight) : (CL / 2);
         const avgY = totalPlacedWeight > 0 ? (cogSumY / totalPlacedWeight) : (CH / 2);
@@ -475,32 +512,115 @@ class ContainerSimulation {
 
         if (totalPlacedWeight > 0) {
             const ratioX = avgX / CL;
-            if (ratioX > 0.62) {
-                cogText = 'Lệch về phía cửa cont';
-            } else if (ratioX < 0.38) {
-                cogText = 'Lệch về phía đầu cont';
-            }
+            if (ratioX > 0.62) cogText = 'Lệch về phía cửa cont';
+            else if (ratioX < 0.38) cogText = 'Lệch về phía đầu cont';
         }
 
-        this.buildCogMarker(avgX, avgY, avgZ, CL, CW, CH);
+        return {
+            placedBoxes: this.placedBoxes.slice(),
+            boxMeshesData: boxMeshesData,
+            unplacedItems: unplacedItems,
+            stats: {
+                placed: totalPlaced,
+                unplaced: unplacedItems.reduce((acc, it) => acc + it.remainingQty, 0),
+                volume: totalPlacedVolume.toFixed(3),
+                containerVolume: containerVolume.toFixed(1),
+                weight: totalPlacedWeight.toFixed(1),
+                maxPayload: spec.payload,
+                utilization: utilization,
+                weightUtilization: weightUtilization,
+                cogStatus: cogText,
+                cogPos: { x: avgX.toFixed(2), y: avgY.toFixed(2), z: avgZ.toFixed(2) }
+            },
+            cogPos: { x: avgX, y: avgY, z: avgZ }
+        };
+    }
 
+    doRecordBoxData(pt, ori, color, item, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, ptIndex, boxMeshesData) {
+        const stepNumber = this.placedBoxes.length + 1;
+        this.placedBoxes.push({
+            x: pt.x, y: pt.y, z: pt.z,
+            l: ori.l, h: ori.h, w: ori.w,
+            weight: unitWeight,
+            stackable: stackable
+        });
+
+        boxMeshesData.push({
+            step: stepNumber,
+            name: item.name,
+            x: pt.x, y: pt.y, z: pt.z,
+            l: ori.l, h: ori.h, w: ori.w,
+            weight: unitWeight,
+            color: color,
+            shapeType: shapeType,
+            stop: item.stop || 'Stop 1'
+        });
+
+        candidatePoints.splice(ptIndex, 1);
+        this.generateCandidatePointsForBox(candidatePoints, pt.x, pt.y, pt.z, ori.l, ori.h, ori.w, CL, CW, CH);
+    }
+
+    showContainer(index) {
+        if (!this.multiContainerData || !this.multiContainerData[index]) return null;
+        this.activeContainerIdx = index;
+        const contData = this.multiContainerData[index];
+
+        // 1. Switch equipment & rebuild container geometry
+        this.currentEquipment = contData.type;
+        this.buildContainer();
+
+        // 2. Clear current cargo scene group
+        if (this.cargoGroup) {
+            this.scene.remove(this.cargoGroup);
+            this.cargoGroup.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            this.cargoGroup = null;
+        }
+        if (this.cogMarker) {
+            this.scene.remove(this.cogMarker);
+            this.cogMarker.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            this.cogMarker = null;
+        }
+
+        // 3. Re-create cargo group and 3D meshes for this container
+        this.cargoGroup = new THREE.Group();
+        this.placedBoxes = contData.placedBoxes.slice();
+        this.boxMeshes = [];
+
+        const s = this.scale;
+        for (let i = 0; i < contData.boxMeshesData.length; i++) {
+            const b = contData.boxMeshesData[i];
+            const placedBoxObj = this.placeBox(b.x, b.y, b.z, b.l, b.h, b.w, new THREE.Color(b.color), b.name, s, b.shapeType || 'box', b.step, b.weight);
+            this.boxMeshes.push({
+                step: b.step,
+                mesh: placedBoxObj.mesh,
+                edgeLines: placedBoxObj.edgeLines,
+                name: b.name,
+                x: b.x, y: b.y, z: b.z,
+                l: b.l, h: b.h, w: b.w,
+                weight: b.weight,
+                color: b.color,
+                stop: b.stop || 'Stop 1'
+            });
+        }
+        this.scene.add(this.cargoGroup);
+
+        // 4. Rebuild CoG marker for this container
+        if (contData.cogPos) {
+            const spec = this.containerSpecs[contData.type];
+            this.buildCogMarker(contData.cogPos.x, contData.cogPos.y, contData.cogPos.z, spec.l, spec.w, spec.h);
+        }
+
+        // 5. Update playback steps
         this.totalSteps = this.boxMeshes.length;
         this.setPlaybackStep(this.totalSteps);
 
-        return {
-            placed: totalPlaced,
-            totalRequested: totalRequested,
-            unplaced: Math.max(0, totalRequested - totalPlaced),
-            volume: totalPlacedVolume.toFixed(3),
-            containerVolume: containerVolume.toFixed(1),
-            weight: totalPlacedWeight.toFixed(1),
-            maxPayload: spec.payload,
-            utilization: utilization,
-            weightUtilization: weightUtilization,
-            cogStatus: cogText,
-            cogPos: { x: avgX.toFixed(2), y: avgY.toFixed(2), z: avgZ.toFixed(2) },
-            fitsAll: (totalRequested === totalPlaced)
-        };
+        return contData.stats;
     }
 
     // Helper: Validates if a box can physically be placed at pt with given orientation
@@ -577,19 +697,21 @@ class ContainerSimulation {
             }
         }
 
-        // Require at least 65% bottom surface support to ensure physical stability while fitting notches
-        if (supportedArea < boxBottomArea * 0.65) {
+        // Require at least 60% bottom surface support to ensure physical stability while fitting notches
+        if (supportedArea < boxBottomArea * 0.60) {
             return false;
         }
 
-        // Strictly prevent forward overhang: box cannot stick out into thin air beyond the supporting boxes below
-        // This eliminates overhang shadows that trap empty chasms/trenches between cargo groups!
-        if (maxSupportX > -Infinity && (x + l) > maxSupportX + 0.04) {
+        // Strict overhang tolerance: allow at most 2.5cm (0.025m) past supporting boxes.
+        // Prohibiting protruding "balconies" into empty air ensures the floor space in front
+        // is never blocked, completely eliminating vertical chasms/trenches between SKUs with different carton lengths!
+        const maxOverhang = 0.025;
+        if (maxSupportX > -Infinity && (x + l) > maxSupportX + maxOverhang) {
             return false;
         }
 
         // Also prevent backward overhang into mid-air
-        if (minSupportX < Infinity && x < minSupportX - 0.04) {
+        if (minSupportX < Infinity && x < minSupportX - maxOverhang) {
             return false;
         }
 
@@ -631,20 +753,28 @@ class ContainerSimulation {
         this.addCandidatePoint(pts, x, y + h, -CW / 2, CL, CW, CH);
         // 7. Top-front corner
         this.addCandidatePoint(pts, x + l, y + h, z, CL, CW, CH);
+        // 8. In front on the floor to the right of current box
+        this.addCandidatePoint(pts, x + l, 0, z + w, CL, CW, CH);
+        // 9. If placed above floor, also generate floor point beneath if clear
+        if (y > 0.01) {
+            this.addCandidatePoint(pts, x, 0, z, CL, CW, CH);
+            this.addCandidatePoint(pts, x, 0, -CW / 2, CL, CW, CH);
+        }
     }
 
     sortCandidatePoints(pts) {
         pts.sort((a, b) => {
-            // 1. Primary: X axis (fill from inside out, smallest X first to fill notches/gaps)
-            if (Math.abs(a.x - b.x) > 0.008) {
-                return a.x - b.x;
+            const diffX = a.x - b.x;
+            // When candidate points are within 15cm in X: prioritize bottom-up (Y) first, then left-to-right (Z)!
+            // This prevents building an isolated chimney tower up to the ceiling before laying the floor bed!
+            if (Math.abs(diffX) <= 0.15) {
+                if (Math.abs(a.y - b.y) > 0.008) {
+                    return a.y - b.y;
+                }
+                return a.z - b.z;
             }
-            // 2. Secondary: Y axis (bottom to top, floor first)
-            if (Math.abs(a.y - b.y) > 0.008) {
-                return a.y - b.y;
-            }
-            // 3. Tertiary: Z axis (left to right)
-            return a.z - b.z;
+            // Otherwise, fill from inside out (smaller X first)
+            return diffX;
         });
     }
 
