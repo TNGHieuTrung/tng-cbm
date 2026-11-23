@@ -482,13 +482,16 @@ class ContainerSimulation {
         };
     }
 
-    // Physical support check: box at y > 0 must rest securely on floor or boxes below ("Gối đầu" vững chắc)
+    // Physical support check: box at y > 0 must rest securely on floor or boxes below ("Gối đầu" vững chắc, triệt tiêu khe hở khoảng trống)
     isSupported(x, y, z, l, h, w) {
-        if (y <= 0.002) return true; // Sits on container floor
+        if (y <= 0.002) return true; // Sits directly on container floor
 
         let supportedArea = 0;
         const boxBottomArea = l * w;
-        const eps = 0.008; // 8mm height tolerance
+        const eps = 0.012; // 12mm height tolerance to account for SKU dimension variance
+
+        let maxSupportX = -Infinity;
+        let minSupportX = Infinity;
 
         for (const b of this.placedBoxes) {
             // Check if top of box b matches y
@@ -501,12 +504,31 @@ class ContainerSimulation {
                 // Overlap rectangle in X-Z plane
                 const overlapX = Math.max(0, Math.min(x + l, b.x + b.l) - Math.max(x, b.x));
                 const overlapZ = Math.max(0, Math.min(z + w, b.z + b.w) - Math.max(z, b.z));
-                supportedArea += (overlapX * overlapZ);
+                if (overlapX > 0.005 && overlapZ > 0.005) {
+                    supportedArea += (overlapX * overlapZ);
+                    if (b.x + b.l > maxSupportX) maxSupportX = b.x + b.l;
+                    if (b.x < minSupportX) minSupportX = b.x;
+                }
             }
         }
 
-        // Require at least 40% of the bottom surface area to be supported
-        return (supportedArea >= boxBottomArea * 0.40);
+        // Require at least 80% bottom surface support to prevent tipping & structural collapse
+        if (supportedArea < boxBottomArea * 0.80) {
+            return false;
+        }
+
+        // Strictly prevent forward overhang: box cannot stick out into thin air beyond the supporting boxes below
+        // This eliminates overhang shadows that trap empty chasms/trenches between cargo groups!
+        if (maxSupportX > -Infinity && (x + l) > maxSupportX + 0.025) {
+            return false;
+        }
+
+        // Also prevent backward overhang into mid-air
+        if (minSupportX < Infinity && x < minSupportX - 0.025) {
+            return false;
+        }
+
+        return true;
     }
 
     addCandidatePoint(pts, x, y, z, CL, CW, CH) {
