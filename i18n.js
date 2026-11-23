@@ -2,9 +2,9 @@
 const translations = {
     vi: {
         // Navigation
-        'nav.title': 'Máy tính xếp hàng Container',
+        'nav.title': 'AI xếp hàng Container',
         'nav.home': 'Trang chủ',
-        'nav.calculator': 'Máy tính xếp hàng',
+        'nav.calculator': 'AI xếp hàng',
         'nav.tools': 'Công cụ',
         'nav.guides': 'Hướng dẫn',
         'nav.contact': 'Liên hệ',
@@ -13,7 +13,7 @@ const translations = {
         'hero.vesselTag': 'Đội tàu vận tải biển TNG Global • Chuyến hàng quốc tế',
         'hero.badge': '🚢 Cổng thông tin Logistics TNG • Phụ trách: hieutrung@tng.vn',
         'hero.titlePrefix': 'TNG Logistics',
-        'hero.title': 'Máy tính xếp hàng Container 3D',
+        'hero.title': 'AI xếp hàng Container 3D',
         'hero.desc': 'Lên kế hoạch xếp hàng trước khi bốc dỡ cho đội tàu chở hàng TNG và hệ thống logistics đa phương thức. Mô phỏng 3D trực quan cho container biển, rơ moóc, xe tải và toa tàu.',
         'hero.quote': 'Hệ thống tự động tính toán thể tích CBM, tải trọng, vị trí trọng tâm và tối ưu hóa không gian chứa hàng trên từng chuyến tàu vận tải của TNG.',
         'hero.startBtn': '<i class="fas fa-cubes"></i> Bắt đầu xếp hàng 3D',
@@ -22,7 +22,7 @@ const translations = {
 
         // Selector
         'selector.label': '— CHỌN MÁY TÍNH CỦA BẠN',
-        'selector.planner.title': 'Máy tính xếp hàng Container & Mô phỏng 3D',
+        'selector.planner.title': 'AI xếp hàng Container & Mô phỏng 3D',
         'selector.planner.desc': 'Lên kế hoạch bốc hàng 3D cho container biển, xe tải, hàng không',
         'selector.cbm.title': 'Máy tính CBM',
         'selector.cbm.desc': 'Tính thể tích khối hàng hóa nhanh chóng',
@@ -179,7 +179,7 @@ const translations = {
         'tools.tag': '🚛 Công cụ logistics miễn phí',
         'tools.title': 'Công cụ CBM, Vận tải & Xếp hàng Container',
         'tools.desc': 'CBM3 cung cấp các công cụ trực tuyến thiết thực cho đội ngũ logistics, nhà xuất nhập khẩu, và chuyên gia thương mại quốc tế.',
-        'tools.t1.title': 'Máy tính xếp hàng 3D',
+        'tools.t1.title': 'AI xếp hàng 3D',
         'tools.t1.desc': 'Mô phỏng 3D xếp hàng container với nhiều thuật toán tối ưu',
         'tools.t2.title': 'Máy tính CBM',
         'tools.t2.desc': 'Tính thể tích khối hàng hóa nhanh chóng và chính xác',
@@ -504,7 +504,7 @@ class I18n {
 
         // Page title
         document.title = this.currentLang === 'vi'
-            ? 'TNG Logistics - Máy tính xếp hàng Container 3D'
+            ? 'TNG Logistics - AI xếp hàng Container 3D'
             : 'TNG Logistics - 3D Container Loading Calculator';
     }
 

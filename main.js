@@ -2,6 +2,38 @@
 document.addEventListener('DOMContentLoaded', () => {
 
     let liveSimTimeout = null;
+    let toastTimer = null;
+
+    function showToast(message, isError = false) {
+        let toast = document.getElementById('tngToast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'tngToast';
+            document.body.appendChild(toast);
+        }
+        toast.textContent = message;
+        Object.assign(toast.style, {
+            position: 'fixed',
+            bottom: '84px',
+            right: '24px',
+            zIndex: '99999',
+            padding: '12px 18px',
+            borderRadius: '999px',
+            fontSize: '13px',
+            fontWeight: '600',
+            color: '#f8fafc',
+            background: isError ? 'rgba(220, 38, 38, 0.95)' : 'rgba(15, 23, 42, 0.95)',
+            border: isError ? '1px solid #f87171' : '1px solid rgba(45, 212, 191, 0.6)',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.35)',
+            opacity: '1',
+            transition: 'opacity 0.25s ease',
+            pointerEvents: 'none'
+        });
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+            toast.style.opacity = '0';
+        }, 4000);
+    }
 
     // 1. Initialize 3D Hero and Simulation
     let simulation = null;
@@ -76,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const simEquipmentLabel = document.getElementById('simEquipmentLabel');
     const autoFitToggle = document.getElementById('autoFitToggle');
     const enforcePayloadToggle = document.getElementById('enforcePayloadToggle');
-    const isPayloadEnforced = () => (enforcePayloadToggle ? enforcePayloadToggle.checked : true);
+    const isPayloadEnforced = () => (enforcePayloadToggle ? enforcePayloadToggle.checked : false);
     const bestFitBanner = document.getElementById('bestFitBanner');
     const bestFitMsg = document.getElementById('bestFitMsg');
     const btnApplyFit = document.getElementById('btnApplyFit');
@@ -1248,13 +1280,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         updateOverallSummary();
                         syncCardsToTable();
                         evaluateBestFitAndSync();
-                        alert(`Đã nhập thành công ${rows.length} loại hàng hóa từ file Excel!`);
+                        showToast(`Đã nhập thành công ${rows.length} loại hàng hóa từ file Excel!`);
                     } else {
-                        alert('Không tìm thấy dữ liệu hàng hóa trong file đã chọn!');
+                        showToast('Không tìm thấy dữ liệu hàng hóa trong file đã chọn!', true);
                     }
                 } catch (err) {
                     console.error('Error importing Excel:', err);
-                    alert('Lỗi đọc file Excel: ' + err.message);
+                    showToast('Lỗi đọc file Excel: ' + err.message, true);
                 } finally {
                     excelFileInput.value = '';
                 }

@@ -504,7 +504,7 @@ class ContainerSimulation {
 
     packSingleContainerInternal(cargoItems, spec, algorithm, options = {}) {
         const CL = spec.l, CW = spec.w, CH = spec.h;
-        const enforcePayload = options.enforcePayload !== false;
+        const enforcePayload = options.enforcePayload === true;
 
         this.placedBoxes = []; // Temporary for collision / support validation
         this.initSpatialGrid(CW);
@@ -785,8 +785,26 @@ class ContainerSimulation {
         return result;
     }
 
+    // Prevent tucking boxes under a tiny (2mm-40mm) overhead micro-lip from a previous SKU stagger,
+    // which otherwise caps the column early and traps a large hollow vertical void above it.
+    hasOverheadMicroLip(x, y, z, l, h, w, CH) {
+        const eps = 0.002;
+        const queryH = CH - (y + h) + eps;
+        if (queryH <= eps) return false;
+        const candidates = this.getCandidateBoxes(x, y + h - eps, z, 0.04, queryH, w);
+        for (let i = 0; i < candidates.length; i++) {
+            const b = candidates[i];
+            if (b.y >= y + h - eps &&
+                b.x + b.l > x + eps && b.x + b.l <= x + 0.04 &&
+                b.z < z + w - eps && b.z + b.w > z + eps) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Helper: Validates if a box can physically be placed at pt with given orientation
-    canPlaceBox(pt, ori, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec, enforcePayload = true) {
+    canPlaceBox(pt, ori, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec, enforcePayload = false) {
         if (pt.x + ori.l > CL + 0.001) return false;
         if (pt.y + ori.h > CH + 0.001) return false;
         if (pt.z + ori.w > CW / 2 + 0.001) return false;
@@ -797,6 +815,7 @@ class ContainerSimulation {
 
         if (this.checkCollision(pt.x, pt.y, pt.z, ori.l, ori.h, ori.w)) return false;
         if (!this.isSupported(pt.x, pt.y, pt.z, ori.l, ori.h, ori.w)) return false;
+        if (this.hasOverheadMicroLip(pt.x, pt.y, pt.z, ori.l, ori.h, ori.w, CH)) return false;
 
         return true;
     }
