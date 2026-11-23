@@ -154,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 4. Cargo Items Calculation & Dynamic Management
     const cargoCardsContainer = document.getElementById('cargoCards');
     const addCargoBtn = document.getElementById('addCargoBtn');
-    let nextCargoId = 2;
+    let nextCargoId = 3;
     const defaultColors = ['#dc2626', '#2563eb', '#16a34a', '#ea580c', '#7c3aed', '#0891b2'];
 
     function setupCargoCardListeners(card) {
@@ -343,6 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const wt = parseFloat(card.querySelector('.cargo-weight')?.value) || 10;
             const color = card.querySelector('.color-picker')?.value || '#dc2626';
             const stackChecked = card.querySelector('.checkbox-pill input')?.checked !== false;
+            const currentStop = card.dataset.stop || 'Stop 1';
 
             const totalWt = (wt * qty).toLocaleString('en-US', { maximumFractionDigits: 1 });
             const totalCbm = ((w * l * h * qty) / 1000000).toFixed(3);
@@ -363,11 +364,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td style="text-align:center;"><input type="checkbox" class="tbl-stack" ${stackChecked ? 'checked' : ''}></td>
                 <td>
                     <select class="tbl-stop">
-                        <option value="Stop 1">Stop 1 (Sâu nhất)</option>
-                        <option value="Stop 2">Stop 2</option>
-                        <option value="Stop 3">Stop 3</option>
-                        <option value="Stop 4">Stop 4</option>
-                        <option value="Stop 5">Stop 5 (Cửa cont)</option>
+                        <option value="Stop 1" ${currentStop === 'Stop 1' ? 'selected' : ''}>Stop 1 (Sâu nhất)</option>
+                        <option value="Stop 2" ${currentStop === 'Stop 2' ? 'selected' : ''}>Stop 2</option>
+                        <option value="Stop 3" ${currentStop === 'Stop 3' ? 'selected' : ''}>Stop 3</option>
+                        <option value="Stop 4" ${currentStop === 'Stop 4' ? 'selected' : ''}>Stop 4</option>
+                        <option value="Stop 5" ${currentStop === 'Stop 5' ? 'selected' : ''}>Stop 5 (Cửa cont)</option>
                     </select>
                 </td>
                 <td>
@@ -381,6 +382,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     <button class="tbl-del-btn" title="Xóa dòng"><i class="fas fa-trash-alt"></i></button>
                 </td>
             `;
+
+            const stopSelect = tr.querySelector('.tbl-stop');
+            if (stopSelect) {
+                stopSelect.addEventListener('change', () => {
+                    card.dataset.stop = stopSelect.value;
+                    evaluateBestFitAndSync();
+                });
+            }
 
             // Row input listeners to sync back to corresponding card
             const bindRowInput = (sel, cardSel, isVal = true, isCheck = false) => {
@@ -526,7 +535,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const activeRotBtn = card.querySelector('.rot-btn.active');
             const rotation = activeRotBtn && activeRotBtn.title.includes('Khóa') ? 'locked' : 'horizontal';
 
-            items.push({ name, width, length, height, qty, weight, color, type, stackable, rotation, stop: 'Stop 1' });
+            items.push({ name, width, length, height, qty, weight, color, type, stackable, rotation, stop: card.dataset.stop || 'Stop 1' });
         });
 
         return items;

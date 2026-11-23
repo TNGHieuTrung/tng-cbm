@@ -227,7 +227,7 @@
                                 </div>
                                 <div class="dim-input">
                                     <label data-i18n="app.cargo.qty">Số lượng</label>
-                                    <input type="number" class="cargo-qty" value="100" min="1">
+                                    <input type="number" class="cargo-qty" value="60" min="1">
                                 </div>
                             </div>
 
@@ -238,11 +238,11 @@
                                 </div>
                                 <div class="dim-input">
                                     <label data-i18n="app.cargo.totalWeight">Tổng KL (kg)</label>
-                                    <span class="computed-value" id="totalWeight1">1,500</span>
+                                    <span class="computed-value" id="totalWeight1">900</span>
                                 </div>
                                 <div class="dim-input">
                                     <label data-i18n="app.cargo.volume">Thể tích (m³)</label>
-                                    <span class="computed-value" id="totalVol1">12.000</span>
+                                    <span class="computed-value" id="totalVol1">7.200</span>
                                 </div>
                             </div>
 
@@ -266,6 +266,94 @@
                                 <div class="option-group">
                                     <label data-i18n="app.cargo.color">Màu sắc</label>
                                     <input type="color" class="color-picker" value="#dc2626">
+                                </div>
+                            </div>
+
+                            <div class="cargo-options">
+                                <div class="option-group">
+                                    <label data-i18n="app.cargo.rotation">Xoay</label>
+                                    <div class="rotation-buttons">
+                                        <button class="rot-btn active" title="Tự do"><i class="fas fa-sync-alt"></i></button>
+                                        <button class="rot-btn" title="Khóa"><i class="fas fa-lock"></i></button>
+                                    </div>
+                                    <span class="rot-label" data-i18n="app.cargo.rotFree">Chỉ ngang</span>
+                                </div>
+                                <div class="option-group">
+                                    <label data-i18n="app.cargo.loadMethod">Phương pháp</label>
+                                    <select class="select-sm">
+                                        <option data-i18n="app.cargo.floorOnly">Chỉ xếp sàn</option>
+                                        <option data-i18n="app.cargo.stackFull">Xếp đầy</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Cargo Card 2 -->
+                        <div class="cargo-card" data-cargo-id="2">
+                            <div class="cargo-card-header">
+                                <label data-i18n="app.cargo.itemName">TÊN HÀNG HÓA</label>
+                                <div class="card-actions">
+                                    <button class="action-btn" title="Nhân bản" data-i18n-title="app.cargo.duplicate"><i class="fas fa-clone"></i></button>
+                                    <button class="action-btn" title="Xem trước" data-i18n-title="app.cargo.preview"><i class="fas fa-eye"></i></button>
+                                    <button class="action-btn delete" title="Xóa" data-i18n-title="app.cargo.delete"><i class="fas fa-minus"></i></button>
+                                </div>
+                            </div>
+                            <input type="text" class="cargo-name" placeholder="Nhập tên hàng hóa..." data-i18n-placeholder="app.cargo.namePlaceholder" value="Thùng hàng B">
+
+                            <div class="dims-row">
+                                <div class="dim-input">
+                                    <label data-i18n="app.cargo.width">Rộng (cm)</label>
+                                    <input type="number" class="cargo-width" value="40" min="1">
+                                </div>
+                                <div class="dim-input">
+                                    <label data-i18n="app.cargo.length">Dài (cm)</label>
+                                    <input type="number" class="cargo-length" value="40" min="1">
+                                </div>
+                                <div class="dim-input">
+                                    <label data-i18n="app.cargo.height">Cao (cm)</label>
+                                    <input type="number" class="cargo-height" value="30" min="1">
+                                </div>
+                                <div class="dim-input">
+                                    <label data-i18n="app.cargo.qty">Số lượng</label>
+                                    <input type="number" class="cargo-qty" value="40" min="1">
+                                </div>
+                            </div>
+
+                            <div class="dims-row">
+                                <div class="dim-input">
+                                    <label data-i18n="app.cargo.weight">Trọng lượng (kg)</label>
+                                    <input type="number" class="cargo-weight" value="10" min="0" step="0.1">
+                                </div>
+                                <div class="dim-input">
+                                    <label data-i18n="app.cargo.totalWeight">Tổng KL (kg)</label>
+                                    <span class="computed-value" id="totalWeight2">400</span>
+                                </div>
+                                <div class="dim-input">
+                                    <label data-i18n="app.cargo.volume">Thể tích (m³)</label>
+                                    <span class="computed-value" id="totalVol2">1.920</span>
+                                </div>
+                            </div>
+
+                            <div class="cargo-options">
+                                <div class="option-group">
+                                    <label data-i18n="app.cargo.type">Loại</label>
+                                    <div class="radio-group">
+                                        <label class="radio-pill active">
+                                            <input type="radio" name="type2" value="box" checked> <i class="fas fa-cube"></i> <span data-i18n="app.cargo.box">Hộp</span>
+                                        </label>
+                                        <label class="radio-pill">
+                                            <input type="radio" name="type2" value="cylinder"> <i class="fas fa-circle"></i> <span data-i18n="app.cargo.cylinder">Trụ</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="option-group">
+                                    <label class="checkbox-pill active">
+                                        <input type="checkbox" checked> <i class="fas fa-layer-group"></i> <span data-i18n="app.cargo.stackable">Xếp chồng</span>
+                                    </label>
+                                </div>
+                                <div class="option-group">
+                                    <label data-i18n="app.cargo.color">Màu sắc</label>
+                                    <input type="color" class="color-picker" value="#2563eb">
                                 </div>
                             </div>
 

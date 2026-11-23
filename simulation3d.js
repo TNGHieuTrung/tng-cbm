@@ -300,20 +300,33 @@ class ContainerSimulation {
         let cogSumY = 0;
         let cogSumZ = 0;
 
-        // Sort items for optimal placement based on chosen algorithm
+        // Sort items for sequential loading based on algorithm & logistics rules
         const itemsCopy = cargoItems.map(item => ({ ...item }));
-        if (algorithm === 'stability' || algorithm === 'best-balance') {
-            // Heaviest or largest base footprint items first (bottom layers)
-            itemsCopy.sort((a, b) => (b.weight * b.qty) - (a.weight * a.qty));
+        if (algorithm === 'stability') {
+            // Stability: Heaviest total weight cargo first (deepest inside container)
+            itemsCopy.sort((a, b) => ((b.weight || 0) * (b.qty || 1)) - ((a.weight || 0) * (a.qty || 1)));
         } else if (algorithm === 'max-volume') {
-            // Largest individual volume first
-            itemsCopy.sort((a, b) => (b.width * b.length * b.height) - (a.width * a.length * a.height));
+            // Max volume: Largest cargo volume first
+            itemsCopy.sort((a, b) => {
+                const volA = ((a.width || 50) * (a.length || 60) * (a.height || 40) * (a.qty || 1));
+                const volB = ((b.width || 50) * (b.length || 60) * (b.height || 40) * (b.qty || 1));
+                return volB - volA;
+            });
+        } else if (algorithm === 'easy-loading') {
+            // Easy loading (LIFO): Stop 1 deepest inside (back wall), Stop 5 near door
+            itemsCopy.sort((a, b) => (a.stop || 'Stop 1').localeCompare(b.stop || 'Stop 1'));
+        } else {
+            // 'best-balance' (Default): Respect user item sequence, grouping by Stop if specified
+            itemsCopy.sort((a, b) => {
+                const stopA = a.stop || 'Stop 1';
+                const stopB = b.stop || 'Stop 1';
+                if (stopA !== stopB) return stopA.localeCompare(stopB);
+                return 0; // maintain user card / table order
+            });
         }
 
-        // Space allocation coordinates
-        let currentX = 0;
-        let currentY = 0;
-        let currentZ = -CW / 2;
+        // Sequential packing coordinate along container length (X axis)
+        let currentStartX = 0; // Starts from back wall (x = 0)
 
         for (const item of itemsCopy) {
             const qty = parseInt(item.qty) || 0;
@@ -330,12 +343,22 @@ class ContainerSimulation {
 
             let placedCount = 0;
 
-            // Determine primary orientation that fits best in container
+            // Determine optimal orientation to maximize container width utilization
             let dimL = baseL, dimW = baseW, dimH = baseH;
 
-            // Auto-orient: if width > container width but length fits, swap
-            if (dimW > CW && dimL <= CW && rotMode !== 'locked') {
-                const tmp = dimW; dimW = dimL; dimL = tmp;
+            if (rotMode !== 'locked') {
+                const colsOrig = Math.floor(CW / baseW);
+                const colsRot = Math.floor(CW / baseL);
+                const utilOrig = colsOrig > 0 ? (colsOrig * baseW) / CW : 0;
+                const utilRot = colsRot > 0 ? (colsRot * baseL) / CW : 0;
+
+                if (colsRot > 0 && utilRot > utilOrig && baseW <= CL + 0.05) {
+                    dimW = baseL;
+                    dimL = baseW;
+                } else if (dimW > CW && dimL <= CW) {
+                    dimW = baseL;
+                    dimL = baseW;
+                }
             }
 
             // Check if single box physically exceeds container inner dimensions
@@ -345,34 +368,44 @@ class ContainerSimulation {
                 continue;
             }
 
-            // 3D placement scanning grid
-            const stepY = dimH;
-            const stepZ = dimW;
-            const stepX = dimL;
+            const maxLayers = stackable ? Math.max(1, Math.floor(CH / dimH)) : 1;
+            const maxCols = Math.max(1, Math.floor(CW / dimW));
 
-            const maxLayers = stackable ? Math.floor(CH / stepY) : 1;
-            const maxCols = Math.floor(CW / stepZ);
-            const maxRows = Math.floor(CL / stepX);
+            // Laterally center the boxes in the container width
+            const totalRowWidth = maxCols * dimW;
+            const offsetZ = Math.max(0, (CW - totalRowWidth) / 2);
 
-            for (let layer = 0; layer < maxLayers && placedCount < qty; layer++) {
-                const y = layer * stepY;
-                if (y + dimH > CH + 0.001) break;
+            let maxItemX = currentStartX;
 
-                for (let col = 0; col < maxCols && placedCount < qty; col++) {
-                    const z = -CW / 2 + col * stepZ;
-                    if (z + dimW > CW / 2 + 0.001) break;
+            // Pack this entire cargo item sequentially into its own dedicated block:
+            // Outer loop: row (X) moves forward towards the door from currentStartX
+            // Middle loop: layer (Y) stacks from floor (y=0) up to ceiling (y=CH)
+            // Inner loop: col (Z) fills across container width
+            const maxRows = Math.floor((CL - currentStartX + 0.001) / dimL);
 
-                    for (let row = 0; row < maxRows && placedCount < qty; row++) {
-                        const x = row * stepX;
-                        if (x + dimL > CL + 0.001) break;
+            for (let row = 0; row < maxRows && placedCount < qty; row++) {
+                const x = currentStartX + row * dimL;
+                if (x + dimL > CL + 0.001) {
+                    break; // Container length limit reached
+                }
+
+                let rowPlacedAny = false;
+
+                for (let layer = 0; layer < maxLayers && placedCount < qty; layer++) {
+                    const y = layer * dimH;
+                    if (y + dimH > CH + 0.001) break;
+
+                    for (let col = 0; col < maxCols && placedCount < qty; col++) {
+                        if (placedCount >= qty) break;
+                        const z = -CW / 2 + offsetZ + col * dimW;
+
+                        // Check container payload limit
+                        if (totalPlacedWeight + unitWeight > spec.payload * 1.05) {
+                            break;
+                        }
 
                         // Collision verification
                         if (!this.checkCollision(x, y, z, dimL, dimH, dimW)) {
-                            // Weight threshold check
-                            if (totalPlacedWeight + unitWeight > spec.payload * 1.05) {
-                                break; // Payload reached
-                            }
-
                             const stepNumber = totalPlaced + 1;
                             const placedBoxObj = this.placeBox(x, y, z, dimL, dimH, dimW, color, item.name, s, shapeType, stepNumber, unitWeight);
                             this.placedBoxes.push({ x, y, z, l: dimL, h: dimH, w: dimW, weight: unitWeight });
@@ -397,9 +430,24 @@ class ContainerSimulation {
                             cogSumX += (x + dimL / 2) * unitWeight;
                             cogSumY += (y + dimH / 2) * unitWeight;
                             cogSumZ += (z + dimW / 2) * unitWeight;
+
+                            rowPlacedAny = true;
+                            if (x + dimL > maxItemX) {
+                                maxItemX = x + dimL;
+                            }
                         }
                     }
                 }
+
+                if (!rowPlacedAny && placedCount >= qty) {
+                    break;
+                }
+            }
+
+            // Once ALL units of this item are placed (or space runs out),
+            // the next cargo type begins immediately after this item's block along X!
+            if (placedCount > 0) {
+                currentStartX = maxItemX;
             }
         }
 
