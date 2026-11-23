@@ -378,11 +378,15 @@ class ContainerSimulation {
 
                 if (rotMode === 'garment') {
                     // GARMENT MODE (HÀNG MAY MẶC):
-                    // Hạn chế xoay tối đa để chống nhăn nhàu áo quần!
-                    // Pass 1: Quét toàn bộ candidatePoints CHỈ DÙNG hướng chuẩn (primaryOri).
-                    // Giữ đồng nhất 100% hướng cho thân container.
+                    // Ưu tiên cao nhất hướng chuẩn (primaryOri) để giữ thẳng nếp gấp áo quần, chống nhăn nhàu.
+                    // Nhưng tại mỗi điểm ứng viên (quét từ trong ra ngoài theo thứ tự X nhỏ nhất trước):
+                    // 1. Thử hướng chuẩn primaryOri. Nếu vừa -> Đặt ngay!
+                    // 2. Nếu tại điểm đó hướng chuẩn KHÔNG VỪA (do là hốc khuyết, bậc giật cấp, khe hẹp):
+                    //    -> Thử xoay rotOri để lấp đầy hốc khuyết ngay tại chỗ, TRÁNH BỎ QUA ĐIỂM ĐẶT RỒI NHẢY RA NGOÀI ĐỂ LẠI LỖ HỔNG!
                     for (let i = 0; i < candidatePoints.length; i++) {
                         const pt = candidatePoints[i];
+                        
+                        // Thử 1: Chiều chuẩn (ưu tiên chống nhăn)
                         if (this.canPlaceBox(pt, primaryOri, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec)) {
                             this.doPlaceBox(pt, primaryOri, color, item, s, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i);
                             placedCount++;
@@ -395,25 +399,19 @@ class ContainerSimulation {
                             placedThisBox = true;
                             break;
                         }
-                    }
 
-                    // Pass 2: CHỈ KHI hướng chuẩn KHÔNG THỂ đặt được ở bất kỳ điểm nào (ví dụ: đã chạm vách cont hoặc còn khe hẹp ở mép),
-                    // mới cho phép dùng hướng xoay (rotOri) để lấp đầy khe hở, không lãng phí thể tích cont!
-                    if (!placedThisBox && Math.abs(baseL - baseW) > 0.01) {
-                        for (let i = 0; i < candidatePoints.length; i++) {
-                            const pt = candidatePoints[i];
-                            if (this.canPlaceBox(pt, rotOri, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec)) {
-                                this.doPlaceBox(pt, rotOri, color, item, s, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i);
-                                placedCount++;
-                                totalPlaced++;
-                                totalPlacedVolume += (rotOri.l * rotOri.w * rotOri.h);
-                                totalPlacedWeight += unitWeight;
-                                cogSumX += (pt.x + rotOri.l / 2) * unitWeight;
-                                cogSumY += (pt.y + rotOri.h / 2) * unitWeight;
-                                cogSumZ += (pt.z + rotOri.w / 2) * unitWeight;
-                                placedThisBox = true;
-                                break;
-                            }
+                        // Thử 2: Nếu chiều chuẩn không vừa ở hốc này, cho phép xoay (rotOri) để lấp kín khoảng trống
+                        if (Math.abs(baseL - baseW) > 0.01 && this.canPlaceBox(pt, rotOri, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec)) {
+                            this.doPlaceBox(pt, rotOri, color, item, s, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i);
+                            placedCount++;
+                            totalPlaced++;
+                            totalPlacedVolume += (rotOri.l * rotOri.w * rotOri.h);
+                            totalPlacedWeight += unitWeight;
+                            cogSumX += (pt.x + rotOri.l / 2) * unitWeight;
+                            cogSumY += (pt.y + rotOri.h / 2) * unitWeight;
+                            cogSumZ += (pt.z + rotOri.w / 2) * unitWeight;
+                            placedThisBox = true;
+                            break;
                         }
                     }
                 } else if (rotMode === 'locked') {
@@ -579,19 +577,19 @@ class ContainerSimulation {
             }
         }
 
-        // Require at least 80% bottom surface support to prevent tipping & structural collapse
-        if (supportedArea < boxBottomArea * 0.80) {
+        // Require at least 65% bottom surface support to ensure physical stability while fitting notches
+        if (supportedArea < boxBottomArea * 0.65) {
             return false;
         }
 
         // Strictly prevent forward overhang: box cannot stick out into thin air beyond the supporting boxes below
         // This eliminates overhang shadows that trap empty chasms/trenches between cargo groups!
-        if (maxSupportX > -Infinity && (x + l) > maxSupportX + 0.025) {
+        if (maxSupportX > -Infinity && (x + l) > maxSupportX + 0.04) {
             return false;
         }
 
         // Also prevent backward overhang into mid-air
-        if (minSupportX < Infinity && x < minSupportX - 0.025) {
+        if (minSupportX < Infinity && x < minSupportX - 0.04) {
             return false;
         }
 
