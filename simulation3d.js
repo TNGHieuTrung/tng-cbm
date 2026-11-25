@@ -573,8 +573,72 @@ class ContainerSimulation {
             ] : [];
 
             const plan = this.computeWidthStripPlan(baseL, baseW, CW, rotMode);
+            const hasTwoBands = (plan.a > 0 && plan.b > 0);
             const band1EndZ = Math.round((-CW / 2 + plan.a * baseW) * 1000) / 1000;
+            const bandInfo = { hasTwoBands, band1EndZ };
             const canRotateHoriz = (rotMode !== 'locked' && Math.abs(baseL - baseW) > 0.01);
+
+            // Build canonical Z-lanes for this SKU's optimal width strip plan
+            const canonicalLanes = [];
+            for (let k = 0; k < plan.a; k++) {
+                canonicalLanes.push({
+                    z: Math.round((-CW / 2 + k * baseW) * 1000) / 1000,
+                    ori: primaryOri,
+                    band: 1
+                });
+            }
+            for (let m = 0; m < plan.b; m++) {
+                canonicalLanes.push({
+                    z: Math.round((band1EndZ + m * baseL) * 1000) / 1000,
+                    ori: rotOri,
+                    band: 2
+                });
+            }
+
+            // Seed canonical Z-lanes at all existing front (x, y) positions so previous SKUs'
+            // off-grid Z coordinates cannot steal space, intrude into adjacent lanes, or drop a lane.
+            const frontXY = new Map();
+            for (let p = 0; p < candidatePoints.length; p++) {
+                const cp = candidatePoints[p];
+                const key = `${cp.x.toFixed(3)}|${cp.y.toFixed(3)}`;
+                if (!frontXY.has(key)) frontXY.set(key, { x: cp.x, y: cp.y });
+            }
+            frontXY.forEach(({ x: fx, y: fy }) => {
+                for (let lIdx = 0; lIdx < canonicalLanes.length; lIdx++) {
+                    const lane = canonicalLanes[lIdx];
+                    if (fx + lane.ori.l <= CL + 0.001 && fy + lane.ori.h <= CH + 0.001 &&
+                        !this.checkCollision(fx, fy, lane.z, lane.ori.l, lane.ori.h, lane.ori.w) &&
+                        (fy <= 0.002 || this.isSupported(fx, fy, lane.z, lane.ori.l, lane.ori.h, lane.ori.w))) {
+                        this.addCandidatePoint(candidatePoints, fx, fy, lane.z, CL, CW, CH);
+                    }
+                }
+            });
+
+            const matchCanonicalLane = (zVal) => {
+                let bestLane = null;
+                let bestDist = 0.008; // 8mm strict snap tolerance prevents cross-lane intrusion
+                for (let lIdx = 0; lIdx < canonicalLanes.length; lIdx++) {
+                    const d = Math.abs(zVal - canonicalLanes[lIdx].z);
+                    if (d < bestDist) {
+                        bestDist = d;
+                        bestLane = canonicalLanes[lIdx];
+                    }
+                }
+                return bestLane;
+            };
+
+            const commitPlacement = (pt, ori, ptIndex) => {
+                this.doRecordBoxData(pt, ori, color, item, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, ptIndex, boxMeshesData, bandInfo);
+                if (!ori.isPrimary) rotatedCount++;
+                if (pt.x + ori.l > maxX) maxX = pt.x + ori.l;
+                placedCount++;
+                totalPlaced++;
+                totalPlacedVolume += (ori.l * ori.w * ori.h);
+                totalPlacedWeight += unitWeight;
+                cogSumX += (pt.x + ori.l / 2) * unitWeight;
+                cogSumY += (pt.y + ori.h / 2) * unitWeight;
+                cogSumZ += (pt.z + ori.w / 2) * unitWeight;
+            };
 
             while (placedCount < qty) {
                 if (enforcePayload && totalPlacedWeight + unitWeight > spec.payload * 1.05) {
@@ -585,45 +649,50 @@ class ContainerSimulation {
                 let placedThisBox = false;
                 this.sortCandidatePoints(candidatePoints);
 
+                // PASS 1: Strict canonical Z-lane & band orientation discipline (eliminates intra-SKU gaps & lane drops)
                 for (let i = 0; i < candidatePoints.length; i++) {
                     const pt = candidatePoints[i];
+                    const lane = matchCanonicalLane(pt.z);
+                    if (!lane) continue;
 
-                    let baseOris;
-                    if (plan.b === 0) {
-                        baseOris = canRotateHoriz ? [primaryOri, rotOri] : [primaryOri];
-                    } else if (plan.a === 0) {
-                        baseOris = [rotOri, primaryOri];
-                    } else if (pt.z >= band1EndZ - 0.02) {
-                        baseOris = [rotOri, primaryOri];
-                    } else if (pt.z + primaryOri.w <= band1EndZ + 0.02) {
-                        baseOris = [primaryOri, rotOri];
-                    } else {
-                        baseOris = [rotOri, primaryOri];
+                    const ori = lane.ori;
+                    if (this.canPlaceBox(pt, ori, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec, enforcePayload)) {
+                        commitPlacement(pt, ori, i);
+                        placedThisBox = true;
+                        break;
                     }
+                }
 
-                    const oris = extra3DOris.length > 0 ? baseOris.concat(extra3DOris) : baseOris;
+                // PASS 2: Fallback for residual door gaps, tight notches, or 3D rotations when canonical lanes are full
+                if (!placedThisBox) {
+                    for (let i = 0; i < candidatePoints.length; i++) {
+                        const pt = candidatePoints[i];
 
-                    for (let j = 0; j < oris.length; j++) {
-                        const ori = oris[j];
-                        if (this.canPlaceBox(pt, ori, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec, enforcePayload)) {
-                            this.doRecordBoxData(pt, ori, color, item, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, i, boxMeshesData);
-                            if (pt.y <= 0.002 && plan.a > 0 && plan.b > 0) {
-                                this.addCandidatePoint(candidatePoints, pt.x, 0, band1EndZ, CL, CW, CH);
-                            }
-                            if (!ori.isPrimary) rotatedCount++;
-                            if (pt.x + ori.l > maxX) maxX = pt.x + ori.l;
-                            placedCount++;
-                            totalPlaced++;
-                            totalPlacedVolume += (ori.l * ori.w * ori.h);
-                            totalPlacedWeight += unitWeight;
-                            cogSumX += (pt.x + ori.l / 2) * unitWeight;
-                            cogSumY += (pt.y + ori.h / 2) * unitWeight;
-                            cogSumZ += (pt.z + ori.w / 2) * unitWeight;
-                            placedThisBox = true;
-                            break;
+                        let baseOris;
+                        if (plan.b === 0) {
+                            baseOris = canRotateHoriz ? [primaryOri, rotOri] : [primaryOri];
+                        } else if (plan.a === 0) {
+                            baseOris = [rotOri, primaryOri];
+                        } else if (pt.z >= band1EndZ - 0.02) {
+                            baseOris = [rotOri, primaryOri];
+                        } else if (pt.z + primaryOri.w <= band1EndZ + 0.02) {
+                            baseOris = [primaryOri, rotOri];
+                        } else {
+                            baseOris = [rotOri, primaryOri];
                         }
+
+                        const oris = extra3DOris.length > 0 ? baseOris.concat(extra3DOris) : baseOris;
+
+                        for (let j = 0; j < oris.length; j++) {
+                            const ori = oris[j];
+                            if (this.canPlaceBox(pt, ori, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec, enforcePayload)) {
+                                commitPlacement(pt, ori, i);
+                                placedThisBox = true;
+                                break;
+                            }
+                        }
+                        if (placedThisBox) break;
                     }
-                    if (placedThisBox) break;
                 }
 
                 if (!placedThisBox) break;
@@ -676,7 +745,7 @@ class ContainerSimulation {
         };
     }
 
-    doRecordBoxData(pt, ori, color, item, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, ptIndex, boxMeshesData) {
+    doRecordBoxData(pt, ori, color, item, shapeType, unitWeight, stackable, CL, CW, CH, candidatePoints, ptIndex, boxMeshesData, bandInfo = null) {
         const stepNumber = this.placedBoxes.length + 1;
         const boxRecord = {
             x: pt.x, y: pt.y, z: pt.z,
@@ -699,7 +768,7 @@ class ContainerSimulation {
         });
 
         candidatePoints.splice(ptIndex, 1);
-        this.generateCandidatePointsForBox(candidatePoints, pt.x, pt.y, pt.z, ori.l, ori.h, ori.w, CL, CW, CH);
+        this.generateCandidatePointsForBox(candidatePoints, pt.x, pt.y, pt.z, ori.l, ori.h, ori.w, CL, CW, CH, bandInfo);
     }
 
     showContainer(index) {
@@ -921,43 +990,49 @@ class ContainerSimulation {
         pts.push({ x: snapX, y: snapY, z: snapZ });
     }
 
-    generateCandidatePointsForBox(pts, x, y, z, l, h, w, CL, CW, CH) {
+    generateCandidatePointsForBox(pts, x, y, z, l, h, w, CL, CW, CH, bandInfo = null) {
+        const hasTwoBands = !!(bandInfo && bandInfo.hasTwoBands);
+        const band1EndZ = hasTwoBands ? bandInfo.band1EndZ : null;
+        const inBand2 = hasTwoBands && (z >= band1EndZ - 0.015);
+        const nextZ = z + w;
+        const crossesBand = hasTwoBands && !inBand2 && (nextZ >= band1EndZ - 0.015);
+
         // 1. In front of the box at the same height
         this.addCandidatePoint(pts, x + l, y, z, CL, CW, CH);
         // 2. On top of the box
         this.addCandidatePoint(pts, x, y + h, z, CL, CW, CH);
         // 3. Beside the box to the right
-        this.addCandidatePoint(pts, x, y, z + w, CL, CW, CH);
+        this.addCandidatePoint(pts, x, y, nextZ, CL, CW, CH);
         // 4. In front of the box on the floor (y = 0)
         this.addCandidatePoint(pts, x + l, 0, z, CL, CW, CH);
-        // 5. In front of the box on the floor at the left wall (z = -CW/2)
-        this.addCandidatePoint(pts, x + l, 0, -CW / 2, CL, CW, CH);
-        // 6. On top of the box at the left wall
-        this.addCandidatePoint(pts, x, y + h, -CW / 2, CL, CW, CH);
+        // 5 & 6. Band-isolated left wall / band seam points (prevents cross-band X projection)
+        const bandStartZ = (hasTwoBands && inBand2) ? band1EndZ : (-CW / 2);
+        this.addCandidatePoint(pts, x + l, 0, bandStartZ, CL, CW, CH);
+        this.addCandidatePoint(pts, x, y + h, bandStartZ, CL, CW, CH);
         // 7. Top-front corner
         this.addCandidatePoint(pts, x + l, y + h, z, CL, CW, CH);
-        // 8. In front on the floor to the right of current box
-        this.addCandidatePoint(pts, x + l, 0, z + w, CL, CW, CH);
+        // 8. In front on the floor to the right (do not project Band 1 X across into Band 2)
+        if (!crossesBand) {
+            this.addCandidatePoint(pts, x + l, 0, nextZ, CL, CW, CH);
+        }
         // 9. If placed above floor, also generate floor point beneath if clear
         if (y > 0.01) {
             this.addCandidatePoint(pts, x, 0, z, CL, CW, CH);
-            this.addCandidatePoint(pts, x, 0, -CW / 2, CL, CW, CH);
+            this.addCandidatePoint(pts, x, 0, bandStartZ, CL, CW, CH);
         }
     }
 
     sortCandidatePoints(pts) {
+        // Strictly transitive weak ordering: 5mm X-buckets -> 5mm Y-buckets -> Z left-to-right.
+        // Prevents non-transitive comparator cycles from scrambling TimSort and leaving mid-block gaps.
         pts.sort((a, b) => {
-            const diffX = a.x - b.x;
-            // When candidate points are within 15cm in X: prioritize bottom-up (Y) first, then left-to-right (Z)!
-            // This prevents building an isolated chimney tower up to the ceiling before laying the floor bed!
-            if (Math.abs(diffX) <= 0.15) {
-                if (Math.abs(a.y - b.y) > 0.008) {
-                    return a.y - b.y;
-                }
-                return a.z - b.z;
-            }
-            // Otherwise, fill from inside out (smaller X first)
-            return diffX;
+            const qxA = Math.round(a.x * 200);
+            const qxB = Math.round(b.x * 200);
+            if (qxA !== qxB) return qxA - qxB;
+            const qyA = Math.round(a.y * 200);
+            const qyB = Math.round(b.y * 200);
+            if (qyA !== qyB) return qyA - qyB;
+            return a.z - b.z;
         });
     }
 
