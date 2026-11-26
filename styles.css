@@ -1511,3 +1511,304 @@ img { max-width: 100%; }
     .sticky-btn span { display: none; }
     .sticky-btn { padding: 12px 16px; }
 }
+
+
+/* ===== Phase 1 Upgrades: Shrink Margin, Door Clearance, Include/Exclude, 2-Way Stacking & Smart Mixed Fleet ===== */
+.door-toggle-label {
+    border-color: rgba(245, 158, 11, 0.35);
+    background: rgba(245, 158, 11, 0.08);
+}
+
+.eq-door {
+    margin-left: 16px;
+    color: var(--text-muted);
+}
+
+.shrink-margin-panel {
+    margin-top: 12px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.shrink-margin-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.shrink-margin-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--navy);
+}
+
+.shrink-margin-title i {
+    color: var(--teal);
+}
+
+.effective-dim-badge {
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: #ecfeff;
+    color: #0e7490;
+    border: 1px solid #a5f3fc;
+}
+
+.shrink-presets {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.shrink-preset-btn {
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    font-size: 0.76rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.shrink-preset-btn:hover {
+    border-color: var(--teal);
+    color: var(--teal-dark);
+}
+
+.shrink-preset-btn.active {
+    background: var(--teal);
+    border-color: var(--teal);
+    color: #ffffff;
+}
+
+.shrink-sliders-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.shrink-slider-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.78rem;
+    color: #475569;
+    font-weight: 500;
+}
+
+.shrink-slider-item strong {
+    color: #0f172a;
+}
+
+.shrink-slider-item input[type="range"] {
+    width: 100%;
+    accent-color: var(--teal);
+    cursor: pointer;
+}
+
+.cargo-header-left,
+.cargo-header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.active-sku-badge {
+    font-size: 0.76rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+
+.bulk-include-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.bulk-mini-btn {
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.16s ease;
+}
+
+.bulk-mini-btn:hover {
+    border-color: var(--teal);
+    color: var(--teal-dark);
+    background: #f0fdfa;
+}
+
+.card-header-left-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.include-toggle-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #ecfdf5;
+    border: 1px solid #6ee7b7;
+    color: #065f46;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    cursor: pointer;
+    user-select: none;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+}
+
+.include-toggle-label input {
+    accent-color: #059669;
+    cursor: pointer;
+}
+
+.cargo-card.cargo-excluded {
+    opacity: 0.52;
+    border-style: dashed;
+    border-color: #94a3b8;
+    background: #f8fafc;
+}
+
+.cargo-card.cargo-excluded .include-toggle-label {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #64748b;
+}
+
+.cargo-data-table tr.row-excluded {
+    opacity: 0.5;
+    background: #f8fafc;
+}
+
+.floor-pill.active {
+    background: rgba(245, 158, 11, 0.14);
+    border-color: #f59e0b;
+    color: #b45309;
+}
+
+.smart-fleet-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 18px;
+    background: linear-gradient(90deg, rgba(14, 116, 144, 0.24), rgba(15, 23, 42, 0.85));
+    border-bottom: 1px solid rgba(56, 189, 248, 0.22);
+}
+
+.smart-fleet-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #67e8f9;
+    white-space: nowrap;
+}
+
+.smart-fleet-pills {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.fleet-plan-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(15, 23, 42, 0.72);
+    color: #e2e8f0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.fleet-plan-pill:hover {
+    border-color: #38bdf8;
+    background: rgba(14, 116, 144, 0.38);
+    transform: translateY(-1px);
+}
+
+.fleet-plan-pill.active {
+    border-color: #2dd4bf;
+    background: rgba(13, 148, 136, 0.32);
+    color: #ffffff;
+    box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.35);
+}
+
+.fleet-plan-pill .fleet-rec-star {
+    background: linear-gradient(135deg, #f59e0b, #ea580c);
+    color: #ffffff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 999px;
+}
+
+.fleet-plan-pill .fleet-util-tag {
+    color: #5eead4;
+    font-weight: 700;
+}
+
+@media (max-width: 768px) {
+    .shrink-sliders-row {
+        grid-template-columns: 1fr;
+    }
+    .eq-door {
+        margin-left: 0;
+        display: block;
+    }
+}
+
+.cargo-data-table .tbl-name {
+    min-width: 115px;
+}
+
+.cargo-data-table .tbl-length,
+.cargo-data-table .tbl-width,
+.cargo-data-table .tbl-height {
+    min-width: 68px;
+}
+
+.cargo-data-table .tbl-qty,
+.cargo-data-table .tbl-weight {
+    min-width: 62px;
+}

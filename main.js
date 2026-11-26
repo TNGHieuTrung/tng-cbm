@@ -46,57 +46,72 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('Three.js initialization error:', e);
     }
 
-    // 2. Equipment Specifications Data
+    // 2. Equipment Specifications Data (including ISO door clearances)
     const equipmentData = {
         '20dc': {
             dimStr: '5.898m × 2.352m × 2.393m',
+            doorStr: '2.340m × 2.280m',
             payload: '28,200 kg',
             label: "20' Dry Container (20DC)",
             maxVol: 33.2,
             usableVol: 28.5,
             maxL: 5.898,
             maxW: 2.352,
-            maxH: 2.393
+            maxH: 2.393,
+            doorW: 2.340,
+            doorH: 2.280
         },
         '40dc': {
             dimStr: '12.032m × 2.352m × 2.393m',
+            doorStr: '2.340m × 2.280m',
             payload: '26,680 kg',
             label: "40' Dry Container (40DC)",
             maxVol: 67.7,
             usableVol: 59.0,
             maxL: 12.032,
             maxW: 2.352,
-            maxH: 2.393
+            maxH: 2.393,
+            doorW: 2.340,
+            doorH: 2.280
         },
         '40hc': {
             dimStr: '12.032m × 2.352m × 2.698m',
+            doorStr: '2.340m × 2.585m',
             payload: '26,460 kg',
             label: "40' High Cube (40HC)",
             maxVol: 76.3,
             usableVol: 68.5,
             maxL: 12.032,
             maxW: 2.352,
-            maxH: 2.698
+            maxH: 2.698,
+            doorW: 2.340,
+            doorH: 2.585
         },
         '45hc': {
             dimStr: '13.556m × 2.352m × 2.698m',
+            doorStr: '2.340m × 2.585m',
             payload: '27,800 kg',
             label: "45' High Cube (45HC)",
             maxVol: 86.0,
             usableVol: 76.5,
             maxL: 13.556,
             maxW: 2.352,
-            maxH: 2.698
+            maxH: 2.698,
+            doorW: 2.340,
+            doorH: 2.585
         },
         'custom': {
             dimStr: '6.000m × 2.400m × 2.400m',
+            doorStr: '2.340m × 2.290m',
             payload: '20,000 kg',
             label: 'Tùy chỉnh / Custom Space',
             maxVol: 34.5,
             usableVol: 30.0,
             maxL: 6.000,
             maxW: 2.400,
-            maxH: 2.400
+            maxH: 2.400,
+            doorW: 2.340,
+            doorH: 2.290
         }
     };
 
@@ -104,11 +119,63 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const eqButtons = document.querySelectorAll('.equipment-btn');
     const eqDimDisplay = document.getElementById('eqDimDisplay');
+    const eqDoorDisplay = document.getElementById('eqDoorDisplay');
     const eqPayloadDisplay = document.getElementById('eqPayload');
     const simEquipmentLabel = document.getElementById('simEquipmentLabel');
     const autoFitToggle = document.getElementById('autoFitToggle');
     const enforcePayloadToggle = document.getElementById('enforcePayloadToggle');
+    const enforceDoorClearanceToggle = document.getElementById('enforceDoorClearanceToggle');
+    const marginLSlider = document.getElementById('marginLSlider');
+    const marginWSlider = document.getElementById('marginWSlider');
+    const marginHSlider = document.getElementById('marginHSlider');
+    const marginLVal = document.getElementById('marginLVal');
+    const marginWVal = document.getElementById('marginWVal');
+    const marginHVal = document.getElementById('marginHVal');
+    const effectiveDimDisplay = document.getElementById('effectiveDimDisplay');
+    const shrinkPresetBtns = document.querySelectorAll('.shrink-preset-btn');
+    const smartFleetBar = document.getElementById('smartFleetBar');
+    const smartFleetPills = document.getElementById('smartFleetPills');
+    const btnIncludeAll = document.getElementById('btnIncludeAll');
+    const btnExcludeAll = document.getElementById('btnExcludeAll');
+    const activeSkuCountBadge = document.getElementById('activeSkuCountBadge');
+
     const isPayloadEnforced = () => (enforcePayloadToggle ? enforcePayloadToggle.checked : false);
+    const isDoorClearanceEnforced = () => (enforceDoorClearanceToggle ? enforceDoorClearanceToggle.checked : true);
+    const getPackingOptions = () => ({
+        enforcePayload: isPayloadEnforced(),
+        enforceDoorClearance: isDoorClearanceEnforced(),
+        marginL: parseFloat(marginLSlider?.value) || 0,
+        marginW: parseFloat(marginWSlider?.value) || 0,
+        marginH: parseFloat(marginHSlider?.value) || 0
+    });
+
+    function updateEffectiveDimsUI() {
+        const data = equipmentData[selectedEquipment] || equipmentData['40hc'];
+        const opts = getPackingOptions();
+        if (marginLVal) marginLVal.textContent = `${opts.marginL}%`;
+        if (marginWVal) marginWVal.textContent = `${opts.marginW}%`;
+        if (marginHVal) marginHVal.textContent = `${opts.marginH}%`;
+
+        const effL = (data.maxL * (1 - opts.marginL / 100)).toFixed(3);
+        const effW = (data.maxW * (1 - opts.marginW / 100)).toFixed(3);
+        const effH = (data.maxH * (1 - opts.marginH / 100)).toFixed(3);
+        if (effectiveDimDisplay) {
+            const hasMargin = (opts.marginL > 0 || opts.marginW > 0 || opts.marginH > 0);
+            effectiveDimDisplay.textContent = hasMargin
+                ? `Khả dụng: ${effL}m × ${effW}m × ${effH}m`
+                : `Khả dụng: ${effL}m × ${effW}m × ${effH}m (100%)`;
+        }
+        if (eqDoorDisplay && data.doorStr) {
+            eqDoorDisplay.textContent = data.doorStr;
+        }
+        // Highlight matching preset chip
+        shrinkPresetBtns.forEach(btn => {
+            const presetVal = parseFloat(btn.getAttribute('data-margin'));
+            const match = (opts.marginL === presetVal && opts.marginW === presetVal && opts.marginH === presetVal);
+            btn.classList.toggle('active', match);
+        });
+    }
+
     const bestFitBanner = document.getElementById('bestFitBanner');
     const bestFitMsg = document.getElementById('bestFitMsg');
     const btnApplyFit = document.getElementById('btnApplyFit');
@@ -119,6 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const containerTabsList = document.getElementById('containerTabsList');
 
     let activeContainers = ['20dc'];
+    let lastSmartFleetPlans = [];
     window.simulation = simulation;
 
     function selectEquipment(eqKey, isManual = false) {
@@ -144,8 +212,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const data = equipmentData[eqKey];
         if (eqDimDisplay) eqDimDisplay.textContent = data.dimStr;
+        if (eqDoorDisplay && data.doorStr) eqDoorDisplay.textContent = data.doorStr;
         if (eqPayloadDisplay) eqPayloadDisplay.textContent = data.payload;
         if (simEquipmentLabel) simEquipmentLabel.textContent = data.label;
+        updateEffectiveDimsUI();
 
         const hudContainerTitle = document.getElementById('hudContainerTitle');
         if (hudContainerTitle) hudContainerTitle.textContent = `Container 1 (${data.label.split(' ')[0]})`;
@@ -177,6 +247,34 @@ document.addEventListener('DOMContentLoaded', () => {
             evaluateBestFitAndSync();
         });
     }
+
+    if (enforceDoorClearanceToggle) {
+        enforceDoorClearanceToggle.addEventListener('change', () => {
+            triggerLiveSimulation();
+        });
+    }
+
+    [marginLSlider, marginWSlider, marginHSlider].forEach(slider => {
+        if (slider) {
+            slider.addEventListener('input', () => {
+                updateEffectiveDimsUI();
+                triggerLiveSimulation();
+            });
+        }
+    });
+
+    shrinkPresetBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const val = btn.getAttribute('data-margin') || '0';
+            if (marginLSlider) marginLSlider.value = val;
+            if (marginWSlider) marginWSlider.value = val;
+            if (marginHSlider) marginHSlider.value = val;
+            updateEffectiveDimsUI();
+            triggerLiveSimulation();
+        });
+    });
+
+    updateEffectiveDimsUI();
 
     // 3. Calculator Tab Selector (Load Planner vs CBM Calculator)
     const selectorTabs = document.querySelectorAll('.selector-tab');
@@ -256,15 +354,43 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        const checkPill = card.querySelector('.checkbox-pill');
-        if (checkPill) {
-            checkPill.addEventListener('click', () => {
-                const cb = checkPill.querySelector('input');
-                if (cb) {
-                    cb.checked = !cb.checked;
-                    checkPill.classList.toggle('active', cb.checked);
-                    evaluateBestFitAndSync();
-                }
+        // Include-in-loading checkbox toggle (instant what-if exclusion without deleting SKU)
+        const includeCb = card.querySelector('.cargo-include');
+        if (includeCb) {
+            card.classList.toggle('cargo-excluded', !includeCb.checked);
+            includeCb.addEventListener('change', () => {
+                card.classList.toggle('cargo-excluded', !includeCb.checked);
+                updateOverallSummary();
+                evaluateBestFitAndSync();
+            });
+        }
+
+        // 2-way stacking pill switches: Cho đè lên (.cargo-stackable) & Chỉ đặt sàn (.cargo-floor-only)
+        const stackCb = card.querySelector('.cargo-stackable') || card.querySelector('.stack-pill input') || card.querySelector('.checkbox-pill input');
+        const stackPill = card.querySelector('.stack-pill') || card.querySelector('.checkbox-pill');
+        if (stackCb && stackPill) {
+            stackPill.classList.toggle('active', stackCb.checked);
+            stackCb.addEventListener('change', () => {
+                stackPill.classList.toggle('active', stackCb.checked);
+                evaluateBestFitAndSync();
+            });
+        }
+
+        const floorCb = card.querySelector('.cargo-floor-only');
+        const floorPill = card.querySelector('.floor-pill');
+        if (floorCb && floorPill) {
+            floorPill.classList.toggle('active', floorCb.checked);
+            floorCb.addEventListener('change', () => {
+                floorPill.classList.toggle('active', floorCb.checked);
+                evaluateBestFitAndSync();
+            });
+        }
+
+        // Priority position selector (normal / rear / door)
+        const posSelect = card.querySelector('.cargo-position');
+        if (posSelect) {
+            posSelect.addEventListener('change', () => {
+                evaluateBestFitAndSync();
             });
         }
 
@@ -331,13 +457,20 @@ document.addEventListener('DOMContentLoaded', () => {
         let totalItems = 0;
         let totalVolume = 0;
         let totalWeight = 0;
+        let activeSkus = 0;
 
         cards.forEach(card => {
+            const incCb = card.querySelector('.cargo-include');
+            const isIncluded = incCb ? incCb.checked : true;
+            if (!isIncluded) return;
+            activeSkus++;
+
             const w = parseFloat(card.querySelector('.cargo-width')?.value) || 0;
             const l = parseFloat(card.querySelector('.cargo-length')?.value) || 0;
             const h = parseFloat(card.querySelector('.cargo-height')?.value) || 0;
             const qty = parseInt(card.querySelector('.cargo-qty')?.value) || 0;
-            const weight = parseFloat(card.querySelector('.cargo-weight')?.value) || 0;
+            const rawWt = parseFloat(card.querySelector('.cargo-weight')?.value);
+            const weight = isNaN(rawWt) ? 0 : Math.max(0, rawWt);
 
             totalItems += qty;
             totalVolume += (w * l * h * qty) / 1000000;
@@ -351,6 +484,35 @@ document.addEventListener('DOMContentLoaded', () => {
         if (summaryVol) summaryVol.textContent = `${totalVolume.toFixed(3)} m³`;
         if (summaryWt) summaryWt.textContent = `${totalWeight.toLocaleString('en-US', { maximumFractionDigits: 1 })} kg`;
         if (summaryItems) summaryItems.textContent = totalItems.toString();
+        if (activeSkuCountBadge) {
+            activeSkuCountBadge.textContent = `${activeSkus}/${cards.length} mã đang xếp`;
+        }
+    }
+
+    if (btnIncludeAll) {
+        btnIncludeAll.addEventListener('click', () => {
+            cargoCardsContainer.querySelectorAll('.cargo-card').forEach(card => {
+                const cb = card.querySelector('.cargo-include');
+                if (cb) cb.checked = true;
+                card.classList.remove('cargo-excluded');
+            });
+            updateOverallSummary();
+            syncCardsToTable();
+            evaluateBestFitAndSync();
+        });
+    }
+
+    if (btnExcludeAll) {
+        btnExcludeAll.addEventListener('click', () => {
+            cargoCardsContainer.querySelectorAll('.cargo-card').forEach(card => {
+                const cb = card.querySelector('.cargo-include');
+                if (cb) cb.checked = false;
+                card.classList.add('cargo-excluded');
+            });
+            updateOverallSummary();
+            syncCardsToTable();
+            evaluateBestFitAndSync();
+        });
     }
 
     function duplicateCargoCard(cardToClone, silent = false) {
@@ -383,6 +545,16 @@ document.addEventListener('DOMContentLoaded', () => {
             cloneRot.value = origRot;
         }
 
+        const origPos = cardToClone.querySelector('.cargo-position')?.value;
+        const clonePos = clone.querySelector('.cargo-position');
+        if (clonePos && origPos) {
+            clonePos.value = origPos;
+        }
+
+        const cloneInc = clone.querySelector('.cargo-include');
+        if (cloneInc) cloneInc.checked = true;
+        clone.classList.remove('cargo-excluded');
+
         cargoCardsContainer.appendChild(clone);
         setupCargoCardListeners(clone, silent);
         if (!silent) {
@@ -409,6 +581,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         cards.forEach((card, idx) => {
             const cardId = card.getAttribute('data-cargo-id');
+            const includeChecked = card.querySelector('.cargo-include')?.checked !== false;
             const name = card.querySelector('.cargo-name')?.value || `Hàng hóa ${idx + 1}`;
             const w = parseFloat(card.querySelector('.cargo-width')?.value) || 50;
             const l = parseFloat(card.querySelector('.cargo-length')?.value) || 60;
@@ -417,8 +590,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const rawWt = parseFloat(card.querySelector('.cargo-weight')?.value);
             const wt = isNaN(rawWt) ? 0 : Math.max(0, rawWt);
             const color = card.querySelector('.color-picker')?.value || '#dc2626';
-            const stackChecked = card.querySelector('.checkbox-pill input')?.checked !== false;
+            const stackChecked = (card.querySelector('.cargo-stackable') || card.querySelector('.checkbox-pill input'))?.checked !== false;
+            const floorChecked = card.querySelector('.cargo-floor-only')?.checked === true;
             const rotVal = card.querySelector('.cargo-rotation')?.value || 'fit';
+            const posVal = card.querySelector('.cargo-position')?.value || 'normal';
             const currentStop = card.dataset.stop || 'Stop 1';
 
             const totalWt = (wt * qty).toLocaleString('en-US', { maximumFractionDigits: 1 });
@@ -426,7 +601,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const tr = document.createElement('tr');
             tr.setAttribute('data-card-id', cardId);
+            if (!includeChecked) tr.classList.add('row-excluded');
             tr.innerHTML = `
+                <td style="text-align:center;"><input type="checkbox" class="tbl-include" ${includeChecked ? 'checked' : ''} title="Tính mã này vào lần xếp"></td>
                 <td>${idx + 1}</td>
                 <td><input type="color" class="tbl-color" value="${color}"></td>
                 <td><input type="text" class="tbl-name" value="${name}"></td>
@@ -437,7 +614,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td><input type="number" class="tbl-weight" value="${wt}" min="0" step="0.1"></td>
                 <td class="tbl-tot-wt">${totalWt}</td>
                 <td class="tbl-tot-cbm">${totalCbm}</td>
-                <td style="text-align:center;"><input type="checkbox" class="tbl-stack" ${stackChecked ? 'checked' : ''}></td>
+                <td style="text-align:center;"><input type="checkbox" class="tbl-stack" ${stackChecked ? 'checked' : ''} title="Cho đè lên trên"></td>
+                <td style="text-align:center;"><input type="checkbox" class="tbl-floor" ${floorChecked ? 'checked' : ''} title="Chỉ đặt sát sàn"></td>
                 <td>
                     <select class="tbl-rotation select-sm" style="font-size:12px; padding:3px 6px;">
                         <option value="fit" ${rotVal === 'fit' ? 'selected' : ''}>🔄 Fit dọc/ngang</option>
@@ -456,16 +634,48 @@ document.addEventListener('DOMContentLoaded', () => {
                     </select>
                 </td>
                 <td>
-                    <select class="tbl-priority">
-                        <option value="1">1 (Cao nhất)</option>
-                        <option value="2">2</option>
-                        <option value="3" selected>3</option>
+                    <select class="tbl-position">
+                        <option value="normal" ${posVal === 'normal' ? 'selected' : ''}>📋 Theo thứ tự</option>
+                        <option value="rear" ${posVal === 'rear' ? 'selected' : ''}>⬅️ Sát vách trong</option>
+                        <option value="door" ${posVal === 'door' ? 'selected' : ''}>🚪 Sát cửa cont</option>
                     </select>
                 </td>
                 <td style="text-align:center;">
                     <button class="tbl-del-btn" title="Xóa dòng"><i class="fas fa-trash-alt"></i></button>
                 </td>
             `;
+
+            const incCheckbox = tr.querySelector('.tbl-include');
+            if (incCheckbox) {
+                incCheckbox.addEventListener('change', () => {
+                    const cInc = card.querySelector('.cargo-include');
+                    if (cInc) cInc.checked = incCheckbox.checked;
+                    card.classList.toggle('cargo-excluded', !incCheckbox.checked);
+                    tr.classList.toggle('row-excluded', !incCheckbox.checked);
+                    updateOverallSummary();
+                    evaluateBestFitAndSync();
+                });
+            }
+
+            const floorCheckbox = tr.querySelector('.tbl-floor');
+            if (floorCheckbox) {
+                floorCheckbox.addEventListener('change', () => {
+                    const cFloor = card.querySelector('.cargo-floor-only');
+                    const cPill = card.querySelector('.floor-pill');
+                    if (cFloor) cFloor.checked = floorCheckbox.checked;
+                    if (cPill) cPill.classList.toggle('active', floorCheckbox.checked);
+                    evaluateBestFitAndSync();
+                });
+            }
+
+            const posSelect = tr.querySelector('.tbl-position');
+            if (posSelect) {
+                posSelect.addEventListener('change', () => {
+                    const cPos = card.querySelector('.cargo-position');
+                    if (cPos) cPos.value = posSelect.value;
+                    evaluateBestFitAndSync();
+                });
+            }
 
             const rotSelect = tr.querySelector('.tbl-rotation');
             if (rotSelect) {
@@ -493,7 +703,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (cInp) {
                         if (isCheck) {
                             cInp.checked = inp.checked;
-                            const checkPill = card.querySelector('.checkbox-pill');
+                            const checkPill = card.querySelector('.stack-pill') || card.querySelector('.checkbox-pill');
                             if (checkPill) checkPill.classList.toggle('active', inp.checked);
                         } else if (isVal) {
                             cInp.value = inp.value;
@@ -526,7 +736,7 @@ document.addEventListener('DOMContentLoaded', () => {
             bindRowInput('.tbl-qty', '.cargo-qty');
             bindRowInput('.tbl-weight', '.cargo-weight');
             bindRowInput('.tbl-color', '.color-picker');
-            bindRowInput('.tbl-stack', '.checkbox-pill input', false, true);
+            bindRowInput('.tbl-stack', '.cargo-stackable', false, true);
 
             // Row delete
             tr.querySelector('.tbl-del-btn').addEventListener('click', () => {
@@ -606,11 +816,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 5. Gather Cargo Data from Form
-    function getCargoData() {
+    function getCargoData(includeExcluded = false) {
         const cards = cargoCardsContainer.querySelectorAll('.cargo-card');
         const items = [];
 
         cards.forEach(card => {
+            const incCb = card.querySelector('.cargo-include');
+            const included = incCb ? incCb.checked : true;
+            if (!includeExcluded && !included) return;
+
             const name = card.querySelector('.cargo-name')?.value || 'Hàng hóa';
             const width = parseFloat(card.querySelector('.cargo-width')?.value) || 50;
             const length = parseFloat(card.querySelector('.cargo-length')?.value) || 60;
@@ -623,8 +837,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const typeRadio = card.querySelector('input[type="radio"]:checked');
             const type = typeRadio ? typeRadio.value : 'box';
 
-            const stackCheckbox = card.querySelector('.checkbox-pill input');
+            const stackCheckbox = card.querySelector('.cargo-stackable') || card.querySelector('.checkbox-pill input');
             const stackable = stackCheckbox ? stackCheckbox.checked : true;
+
+            const floorCheckbox = card.querySelector('.cargo-floor-only');
+            const floorOnly = floorCheckbox ? floorCheckbox.checked : false;
+
+            const posSelect = card.querySelector('.cargo-position');
+            const position = posSelect ? posSelect.value : 'normal';
 
             const rotSelect = card.querySelector('.cargo-rotation');
             let rotation = rotSelect ? rotSelect.value : 'fit';
@@ -633,7 +853,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 rotation = activeRotBtn && activeRotBtn.title.includes('Khóa') ? 'locked' : 'fit';
             }
 
-            items.push({ name, width, length, height, qty, weight, color, type, stackable, rotation, stop: card.dataset.stop || 'Stop 1' });
+            items.push({
+                name, width, length, height, qty, weight, color, type,
+                included, stackable, floorOnly, position, rotation,
+                stop: card.dataset.stop || 'Stop 1'
+            });
         });
 
         return items;
@@ -760,8 +984,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!activeContainers || activeContainers.length === 0) {
                 activeContainers = [selectedEquipment || '20dc'];
             }
-            const result = simulation.packCargo(cargoItems, selectedAlgo, activeContainers, { enforcePayload: isPayloadEnforced() });
+            const result = simulation.packCargo(cargoItems, selectedAlgo, activeContainers, getPackingOptions());
             renderContainerTabs(result);
+            renderSmartFleetPills();
             const firstEq = activeContainers[0] || selectedEquipment || '20dc';
             const data = equipmentData[firstEq] || equipmentData['40hc'];
             const hudContainerTitle = document.getElementById('hudContainerTitle');
@@ -769,6 +994,39 @@ document.addEventListener('DOMContentLoaded', () => {
             if (simEquipmentLabel) simEquipmentLabel.textContent = activeContainers.length > 1 ? `${data.label} (Cont 1)` : data.label;
             updateUIWithSimulationResult(result.activeContainerStats || result);
         }, 150);
+    }
+
+    function renderSmartFleetPills() {
+        if (!smartFleetBar || !smartFleetPills) return;
+        if (!lastSmartFleetPlans || lastSmartFleetPlans.length === 0) {
+            smartFleetBar.style.display = 'none';
+            return;
+        }
+        smartFleetBar.style.display = 'flex';
+        const activeKey = activeContainers.join(',');
+        smartFleetPills.innerHTML = '';
+
+        lastSmartFleetPlans.forEach(plan => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            const planKey = plan.fleet.join(',');
+            btn.className = `fleet-plan-pill ${planKey === activeKey ? 'active' : ''}`;
+            btn.innerHTML = `
+                ${plan.recommended ? '<span class="fleet-rec-star">⭐ Tối ưu</span>' : ''}
+                <span>${plan.label}</span>
+                <span class="fleet-util-tag">${plan.fleetUtil}%</span>
+                <small style="opacity:0.7;">(${plan.fleetCbm} m³)</small>
+            `;
+            btn.addEventListener('click', () => {
+                activeContainers = plan.fleet.slice();
+                if (activeContainers.length > 0) {
+                    selectedEquipment = activeContainers[0];
+                }
+                triggerLiveSimulation();
+                showToast(`Đã áp dụng tổ hợp ${plan.label} (Lấp đầy tổng ${plan.fleetUtil}%)`);
+            });
+            smartFleetPills.appendChild(btn);
+        });
     }
 
     function renderContainerTabs(simResult) {
@@ -825,12 +1083,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleAutoSplit() {
         const cargoItems = getCargoData();
+        if (!cargoItems || cargoItems.length === 0) {
+            showToast('Vui lòng chọn ít nhất 1 mã hàng để phân bổ container!', true);
+            return;
+        }
         const selectedAlgo = document.querySelector('input[name="algorithm"]:checked')?.value || 'best-balance';
-        const eqType = selectedEquipment || '40hc';
-        const needed = simulation
-            ? simulation.computeOptimalContainerCount(cargoItems, selectedAlgo, eqType, { enforcePayload: isPayloadEnforced() })
-            : Math.max(2, evaluateBestFit(cargoItems, isPayloadEnforced()).numContainers || 2);
-        activeContainers = Array(Math.max(1, needed)).fill(eqType);
+        const opts = getPackingOptions();
+
+        if (simulation && typeof simulation.computeOptimalMixedFleet === 'function') {
+            const plans = simulation.computeOptimalMixedFleet(cargoItems, selectedAlgo, opts);
+            lastSmartFleetPlans = plans;
+            if (plans && plans.length > 0) {
+                activeContainers = plans[0].fleet.slice();
+                selectedEquipment = activeContainers[0];
+                showToast(`Đề xuất tối ưu: ${plans[0].label} (Tổng lấp đầy ${plans[0].fleetUtil}%)`);
+            } else {
+                const eqType = selectedEquipment || '40hc';
+                const needed = simulation.computeOptimalContainerCount(cargoItems, selectedAlgo, eqType, opts);
+                activeContainers = Array(Math.max(1, needed)).fill(eqType);
+            }
+        } else {
+            const eqType = selectedEquipment || '40hc';
+            const needed = Math.max(2, evaluateBestFit(cargoItems, isPayloadEnforced()).numContainers || 2);
+            activeContainers = Array(Math.max(1, needed)).fill(eqType);
+        }
+
         triggerLiveSimulation();
         if (containerTabsBar) {
             containerTabsBar.style.display = 'flex';
@@ -1140,7 +1417,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnExportExcel) {
         btnExportExcel.addEventListener('click', () => {
             if (typeof XLSX === 'undefined') return;
-            const cargoItems = getCargoData();
+            const cargoItems = getCargoData(true);
             const exportRows = cargoItems.map((item, idx) => {
                 const w = item.width || 50;
                 const l = item.length || 60;
@@ -1158,6 +1435,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     "Đơn trọng (kg)": wt,
                     "Tổng trọng lượng (kg)": wt * q,
                     "Thể tích CBM (m³)": ((w * l * h * q) / 1000000).toFixed(3),
+                    "Xếp chồng (1=Có, 0=Không)": item.stackable === false ? 0 : 1,
+                    "Chỉ đặt sàn (1=Có, 0=Không)": item.floorOnly === true ? 1 : 0,
+                    "Vị trí ưu tiên": item.position || 'normal',
                     "Điểm dỡ hàng": item.stop || 'Stop 1',
                     "Màu sắc": item.color || '#dc2626'
                 };
@@ -1239,9 +1519,17 @@ document.addEventListener('DOMContentLoaded', () => {
                                 ? String(rawStop).trim()
                                 : 'Stop 1';
 
-                            const rawStack = r['Xếp chồng (1=Có, 0=Không)'] ?? r['Xếp chồng'];
+                            const rawStack = r['Xếp chồng (1=Có, 0=Không)'] ?? r['Xếp chồng'] ?? r['Cho đè lên'];
                             const hasStackCol = (rawStack !== undefined && rawStack !== null && String(rawStack).trim() !== '');
                             const stackVal = hasStackCol ? !(String(rawStack).trim() === '0' || String(rawStack).trim().toLowerCase() === 'false') : true;
+
+                            const rawFloor = r['Chỉ đặt sàn (1=Có, 0=Không)'] ?? r['Chỉ đặt sàn'];
+                            const hasFloorCol = (rawFloor !== undefined && rawFloor !== null && String(rawFloor).trim() !== '');
+                            const floorVal = hasFloorCol ? (String(rawFloor).trim() === '1' || String(rawFloor).trim().toLowerCase() === 'true') : false;
+
+                            const rawPos = r['Vị trí ưu tiên'] ?? r['Position'] ?? '';
+                            const posStr = String(rawPos).trim().toLowerCase();
+                            const posVal = (posStr === 'rear' || posStr === 'door') ? posStr : 'normal';
 
                             const rawRot = r['Khóa xoay (1=Khóa, 0=Tự do)'];
                             const hasRotCol = (rawRot !== undefined && rawRot !== null && String(rawRot).trim() !== '');
@@ -1258,13 +1546,25 @@ document.addEventListener('DOMContentLoaded', () => {
                                 card.querySelector('.cargo-weight').value = wt;
                                 card.dataset.stop = stopVal;
 
+                                const incCb = card.querySelector('.cargo-include');
+                                if (incCb) incCb.checked = true;
+                                card.classList.remove('cargo-excluded');
+
                                 const colPicker = card.querySelector('.color-picker');
                                 if (colPicker) colPicker.value = hexColor;
 
-                                const stackCb = card.querySelector('.checkbox-pill input');
-                                const stackPill = card.querySelector('.checkbox-pill');
+                                const stackCb = card.querySelector('.cargo-stackable') || card.querySelector('.checkbox-pill input');
+                                const stackPill = card.querySelector('.stack-pill') || card.querySelector('.checkbox-pill');
                                 if (stackCb) stackCb.checked = stackVal;
                                 if (stackPill) stackPill.classList.toggle('active', stackVal);
+
+                                const floorCb = card.querySelector('.cargo-floor-only');
+                                const floorPill = card.querySelector('.floor-pill');
+                                if (floorCb) floorCb.checked = floorVal;
+                                if (floorPill) floorPill.classList.toggle('active', floorVal);
+
+                                const posSel = card.querySelector('.cargo-position');
+                                if (posSel) posSel.value = posVal;
 
                                 const rotSel = card.querySelector('.cargo-rotation');
                                 if (rotSel && rotVal) rotSel.value = rotVal;
@@ -1276,6 +1576,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         });
 
+                        lastSmartFleetPlans = [];
                         activeContainers = [selectedEquipment || '40hc'];
                         updateOverallSummary();
                         syncCardsToTable();

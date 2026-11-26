@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=20261126-p1">
 </head>
 <body>
     <!-- Navigation -->
@@ -141,6 +141,10 @@
                                 <input type="checkbox" id="enforcePayloadToggle">
                                 <span data-i18n="app.bestFit.payloadMode">⚖️ Giới hạn tải trọng</span>
                             </label>
+                            <label class="auto-fit-toggle-label door-toggle-label" title="Kiểm tra lọt cửa Container chuẩn ISO (Cao cửa 2.585m / 2.280m, Rộng cửa 2.340m) và xà ngang khung cửa">
+                                <input type="checkbox" id="enforceDoorClearanceToggle" checked>
+                                <span data-i18n="app.bestFit.doorMode">🚪 Giới hạn cửa cont</span>
+                            </label>
                         </div>
                     </div>
 
@@ -191,18 +195,59 @@
                     <div class="equipment-dims" id="equipmentDims">
                         <span data-i18n="app.equipment.internal">Kích thước nội bộ:</span>
                         <strong id="eqDimDisplay">5.898m × 2.352m × 2.393m</strong>
+                        <span class="eq-door" data-i18n="app.equipment.doorSize">Cửa cont (R×C):</span>
+                        <strong id="eqDoorDisplay">2.340m × 2.280m</strong>
                         <span class="eq-payload" data-i18n="app.equipment.payload">Tải trọng tối đa:</span>
                         <strong id="eqPayload">28,200 kg</strong>
+                    </div>
+
+                    <!-- Practical Safety / Carton Bulge Shrink Margin Panel -->
+                    <div class="shrink-margin-panel" id="shrinkMarginPanel">
+                        <div class="shrink-margin-top">
+                            <div class="shrink-margin-title">
+                                <i class="fas fa-compress-arrows-alt"></i>
+                                <span data-i18n="app.margin.title">Dự phòng phồng thùng & sai số đóng cont (Shrink Margin)</span>
+                                <span class="effective-dim-badge" id="effectiveDimDisplay">Khả dụng: 5.898m × 2.352m × 2.393m</span>
+                            </div>
+                            <div class="shrink-presets">
+                                <button type="button" class="shrink-preset-btn active" data-margin="0">0% (Lý thuyết)</button>
+                                <button type="button" class="shrink-preset-btn" data-margin="2">2% (May mặc chuẩn)</button>
+                                <button type="button" class="shrink-preset-btn" data-margin="5">5% (An toàn cao)</button>
+                            </div>
+                        </div>
+                        <div class="shrink-sliders-row">
+                            <label class="shrink-slider-item">
+                                <span>Dài (L): <strong id="marginLVal">0%</strong></span>
+                                <input type="range" id="marginLSlider" min="0" max="10" step="1" value="0">
+                            </label>
+                            <label class="shrink-slider-item">
+                                <span>Rộng (W): <strong id="marginWVal">0%</strong></span>
+                                <input type="range" id="marginWSlider" min="0" max="10" step="1" value="0">
+                            </label>
+                            <label class="shrink-slider-item">
+                                <span>Cao (H): <strong id="marginHVal">0%</strong></span>
+                                <input type="range" id="marginHSlider" min="0" max="10" step="1" value="0">
+                            </label>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Cargo Input -->
                 <div class="config-section">
                     <div class="cargo-header">
-                        <h3 data-i18n="app.cargo.title"><i class="fas fa-boxes-stacked"></i> Thẻ hàng hóa</h3>
-                        <div class="cargo-view-toggle">
-                            <button class="view-btn active" data-view="cards" data-i18n="app.cargo.cards">Thẻ</button>
-                            <button class="view-btn" data-view="table" data-i18n="app.cargo.table">Bảng</button>
+                        <div class="cargo-header-left">
+                            <h3 data-i18n="app.cargo.title"><i class="fas fa-boxes-stacked"></i> Thẻ hàng hóa</h3>
+                            <span class="active-sku-badge" id="activeSkuCountBadge">2/2 mã đang xếp</span>
+                        </div>
+                        <div class="cargo-header-right">
+                            <div class="bulk-include-controls">
+                                <button type="button" class="bulk-mini-btn" id="btnIncludeAll" title="Chọn xếp tất cả các mã hàng"><i class="fas fa-check-double"></i> Chọn tất cả</button>
+                                <button type="button" class="bulk-mini-btn" id="btnExcludeAll" title="Bỏ chọn tất cả để test từng mã"><i class="fas fa-ban"></i> Bỏ chọn</button>
+                            </div>
+                            <div class="cargo-view-toggle">
+                                <button class="view-btn active" data-view="cards" data-i18n="app.cargo.cards">Thẻ</button>
+                                <button class="view-btn" data-view="table" data-i18n="app.cargo.table">Bảng</button>
+                            </div>
                         </div>
                     </div>
 
@@ -210,7 +255,13 @@
                         <!-- Cargo Card 1 -->
                         <div class="cargo-card" data-cargo-id="1">
                             <div class="cargo-card-header">
-                                <label data-i18n="app.cargo.itemName">TÊN HÀNG HÓA</label>
+                                <div class="card-header-left-group">
+                                    <label class="include-toggle-label" title="Bật/tắt để tính hoặc tạm ẩn mã hàng này khỏi lần mô phỏng">
+                                        <input type="checkbox" class="cargo-include" checked>
+                                        <span>Xếp</span>
+                                    </label>
+                                    <label data-i18n="app.cargo.itemName">TÊN HÀNG HÓA</label>
+                                </div>
                                 <div class="card-actions">
                                     <button class="action-btn" title="Nhân bản" data-i18n-title="app.cargo.duplicate"><i class="fas fa-clone"></i></button>
                                     <button class="action-btn" title="Xem trước" data-i18n-title="app.cargo.preview"><i class="fas fa-eye"></i></button>
@@ -266,8 +317,13 @@
                                     </div>
                                 </div>
                                 <div class="option-group">
-                                    <label class="checkbox-pill active">
-                                        <input type="checkbox" checked> <i class="fas fa-layer-group"></i> <span data-i18n="app.cargo.stackable">Xếp chồng</span>
+                                    <label class="checkbox-pill stack-pill active" title="Bỏ chọn nếu là hàng dễ vỡ, không cho thùng khác đè lên trên">
+                                        <input type="checkbox" class="cargo-stackable" checked> <i class="fas fa-layer-group"></i> <span data-i18n="app.cargo.stackable">Cho đè lên</span>
+                                    </label>
+                                </div>
+                                <div class="option-group">
+                                    <label class="checkbox-pill floor-pill" title="Bật nếu thùng nặng/cồng kềnh chỉ được đặt trực tiếp sát sàn container">
+                                        <input type="checkbox" class="cargo-floor-only"> <i class="fas fa-arrow-down"></i> <span data-i18n="app.cargo.floorOnly">Chỉ đặt sàn</span>
                                     </label>
                                 </div>
                                 <div class="option-group">
@@ -286,11 +342,12 @@
                                         <option value="all" data-i18n="app.cargo.rot3D">📦 Xoay 3D (Đa hướng)</option>
                                     </select>
                                 </div>
-                                <div class="option-group">
-                                    <label data-i18n="app.cargo.loadMethod">Phương pháp</label>
-                                    <select class="select-sm">
-                                        <option data-i18n="app.cargo.floorOnly">Chỉ xếp sàn</option>
-                                        <option data-i18n="app.cargo.stackFull">Xếp đầy</option>
+                                <div class="option-group" style="min-width: 170px;">
+                                    <label data-i18n="app.cargo.position"><i class="fas fa-map-pin"></i> Vị trí ưu tiên</label>
+                                    <select class="cargo-position select-sm" style="width: 100%; font-weight: 500;">
+                                        <option value="normal">📋 Theo thứ tự</option>
+                                        <option value="rear">⬅️ Sát vách trong</option>
+                                        <option value="door">🚪 Sát cửa cont (Lấy trước)</option>
                                     </select>
                                 </div>
                             </div>
@@ -299,7 +356,13 @@
                         <!-- Cargo Card 2 -->
                         <div class="cargo-card" data-cargo-id="2">
                             <div class="cargo-card-header">
-                                <label data-i18n="app.cargo.itemName">TÊN HÀNG HÓA</label>
+                                <div class="card-header-left-group">
+                                    <label class="include-toggle-label" title="Bật/tắt để tính hoặc tạm ẩn mã hàng này khỏi lần mô phỏng">
+                                        <input type="checkbox" class="cargo-include" checked>
+                                        <span>Xếp</span>
+                                    </label>
+                                    <label data-i18n="app.cargo.itemName">TÊN HÀNG HÓA</label>
+                                </div>
                                 <div class="card-actions">
                                     <button class="action-btn" title="Nhân bản" data-i18n-title="app.cargo.duplicate"><i class="fas fa-clone"></i></button>
                                     <button class="action-btn" title="Xem trước" data-i18n-title="app.cargo.preview"><i class="fas fa-eye"></i></button>
@@ -355,8 +418,13 @@
                                     </div>
                                 </div>
                                 <div class="option-group">
-                                    <label class="checkbox-pill active">
-                                        <input type="checkbox" checked> <i class="fas fa-layer-group"></i> <span data-i18n="app.cargo.stackable">Xếp chồng</span>
+                                    <label class="checkbox-pill stack-pill active" title="Bỏ chọn nếu là hàng dễ vỡ, không cho thùng khác đè lên trên">
+                                        <input type="checkbox" class="cargo-stackable" checked> <i class="fas fa-layer-group"></i> <span data-i18n="app.cargo.stackable">Cho đè lên</span>
+                                    </label>
+                                </div>
+                                <div class="option-group">
+                                    <label class="checkbox-pill floor-pill" title="Bật nếu thùng nặng/cồng kềnh chỉ được đặt trực tiếp sát sàn container">
+                                        <input type="checkbox" class="cargo-floor-only"> <i class="fas fa-arrow-down"></i> <span data-i18n="app.cargo.floorOnly">Chỉ đặt sàn</span>
                                     </label>
                                 </div>
                                 <div class="option-group">
@@ -375,11 +443,12 @@
                                         <option value="all" data-i18n="app.cargo.rot3D">📦 Xoay 3D (Đa hướng)</option>
                                     </select>
                                 </div>
-                                <div class="option-group">
-                                    <label data-i18n="app.cargo.loadMethod">Phương pháp</label>
-                                    <select class="select-sm">
-                                        <option data-i18n="app.cargo.floorOnly">Chỉ xếp sàn</option>
-                                        <option data-i18n="app.cargo.stackFull">Xếp đầy</option>
+                                <div class="option-group" style="min-width: 170px;">
+                                    <label data-i18n="app.cargo.position"><i class="fas fa-map-pin"></i> Vị trí ưu tiên</label>
+                                    <select class="cargo-position select-sm" style="width: 100%; font-weight: 500;">
+                                        <option value="normal">📋 Theo thứ tự</option>
+                                        <option value="rear">⬅️ Sát vách trong</option>
+                                        <option value="door">🚪 Sát cửa cont (Lấy trước)</option>
                                     </select>
                                 </div>
                             </div>
@@ -396,6 +465,7 @@
                             <table class="cargo-data-table" id="cargoDataTable">
                                 <thead>
                                     <tr>
+                                        <th style="width:42px;" title="Bật/tắt xếp hàng">Xếp</th>
                                         <th style="width:36px;">#</th>
                                         <th style="width:48px;" data-i18n="app.table.color">Màu</th>
                                         <th data-i18n="app.table.name">Tên hàng</th>
@@ -406,11 +476,12 @@
                                         <th data-i18n="app.table.weight">KL (kg)</th>
                                         <th data-i18n="app.table.totalWeight">Tổng KL</th>
                                         <th data-i18n="app.table.cbm">CBM</th>
-                                        <th data-i18n="app.table.stackable">Chồng</th>
+                                        <th title="Cho phép xếp đè lên trên" data-i18n="app.table.stackable">Đè trên</th>
+                                        <th title="Chỉ đặt trực tiếp trên sàn cont">Sát sàn</th>
                                         <th data-i18n="app.table.rotation">Xoay chiều</th>
                                         <th data-i18n="app.table.stop">Điểm dỡ</th>
-                                        <th data-i18n="app.table.priority">Ưu tiên</th>
-                                        <th style="width:70px;" data-i18n="app.table.actions">Xóa</th>
+                                        <th data-i18n="app.table.priority">Vị trí ưu tiên</th>
+                                        <th style="width:60px;" data-i18n="app.table.actions">Xóa</th>
                                     </tr>
                                 </thead>
                                 <tbody id="cargoTableBody">
@@ -506,8 +577,14 @@
                     </div>
                     <div class="tabs-actions">
                         <button class="btn-add-cont" id="btnAddCont" title="Thêm một Container mới"><i class="fas fa-plus"></i> <span data-i18n="sim.addCont">Thêm Container</span></button>
-                        <button class="btn-auto-split" id="btnAutoSplit" title="Tự động tính số lượng cont tối ưu và phân bổ toàn bộ hàng hóa"><i class="fas fa-bolt"></i> <span data-i18n="sim.autoSplit">Tự động phân bổ nhiều Cont</span></button>
+                        <button class="btn-auto-split" id="btnAutoSplit" title="Tự động tìm tổ hợp container hỗn hợp tối ưu nhất (vd: 40HC + 20DC hoặc 2×40HC)"><i class="fas fa-bolt"></i> <span data-i18n="sim.autoSplit">Tự động phân bổ tối ưu</span></button>
                     </div>
+                </div>
+
+                <!-- Smart Mixed Fleet Comparison Bar -->
+                <div class="smart-fleet-bar" id="smartFleetBar" style="display: none;">
+                    <div class="smart-fleet-label"><i class="fas fa-magic"></i> <span data-i18n="sim.smartFleetLabel">Tổ hợp Cont tối ưu:</span></div>
+                    <div class="smart-fleet-pills" id="smartFleetPills"></div>
                 </div>
 
                 <!-- View Controls -->
@@ -1027,8 +1104,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="i18n.js?v=20261125-2"></script>
-    <script src="simulation3d.js?v=20261125-2"></script>
-    <script src="main.js?v=20261125-2"></script>
+    <script src="i18n.js?v=20261126-p1"></script>
+    <script src="simulation3d.js?v=20261126-p1"></script>
+    <script src="main.js?v=20261126-p1"></script>
 </body>
 </html>

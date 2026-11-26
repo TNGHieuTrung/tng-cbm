@@ -30,13 +30,13 @@ class ContainerSimulation {
         this.heightCut = 1.0;
         this.isAnimating = false;
 
-        // Container specs (meters)
+        // Container specs (meters) including ISO doorway clearance (doorW, doorH)
         this.containerSpecs = {
-            '20dc': { l: 5.898, w: 2.352, h: 2.393, name: "20' Dry Container (20DC)", payload: 28200 },
-            '40dc': { l: 12.032, w: 2.352, h: 2.393, name: "40' Dry Container (40DC)", payload: 26680 },
-            '40hc': { l: 12.032, w: 2.352, h: 2.698, name: "40' High Cube (40HC)", payload: 26460 },
-            '45hc': { l: 13.556, w: 2.352, h: 2.698, name: "45' High Cube (45HC)", payload: 27800 },
-            'custom': { l: 6.0, w: 2.4, h: 2.4, name: "Tùy chỉnh / Custom", payload: 20000 }
+            '20dc': { l: 5.898, w: 2.352, h: 2.393, doorW: 2.340, doorH: 2.280, name: "20' Dry Container (20DC)", payload: 28200 },
+            '40dc': { l: 12.032, w: 2.352, h: 2.393, doorW: 2.340, doorH: 2.280, name: "40' Dry Container (40DC)", payload: 26680 },
+            '40hc': { l: 12.032, w: 2.352, h: 2.698, doorW: 2.340, doorH: 2.585, name: "40' High Cube (40HC)", payload: 26460 },
+            '45hc': { l: 13.556, w: 2.352, h: 2.698, doorW: 2.340, doorH: 2.585, name: "45' High Cube (45HC)", payload: 27800 },
+            'custom': { l: 6.0, w: 2.4, h: 2.4, doorW: 2.340, doorH: 2.290, name: "Tùy chỉnh / Custom", payload: 20000 }
         };
 
         this.currentEquipment = '20dc';
@@ -259,6 +259,21 @@ class ContainerSimulation {
         const hinge2 = new THREE.Mesh(hingeGeo, hingeMat);
         hinge2.position.set(L, H / 2, W / 2 - 1);
         this.container3D.add(hinge2);
+
+        // Visual ISO doorway top header beam (shows actual door opening height clearance)
+        const spec = this.containerSpecs[this.currentEquipment];
+        if (spec && spec.doorH && spec.doorH < spec.h - 0.01) {
+            const headerDrop = (spec.h - spec.doorH) * this.scale;
+            const headerGeo = new THREE.BoxGeometry(2.4, headerDrop, W);
+            const headerMat = new THREE.MeshLambertMaterial({
+                color: 0xf59e0b,
+                transparent: true,
+                opacity: 0.42
+            });
+            const headerBar = new THREE.Mesh(headerGeo, headerMat);
+            headerBar.position.set(L - 1.2, H - headerDrop / 2, 0);
+            this.container3D.add(headerBar);
+        }
     }
 
     addContainerDetails(L, W, H) {
@@ -281,9 +296,12 @@ class ContainerSimulation {
         }
     }
 
-    // Helper: Sort items for sequential loading based on algorithm & logistics rules
+    // Helper: Sort items for sequential loading based on algorithm, Include filter & Priority position
     sortCargoItemsByAlgorithm(cargoItems, algorithm) {
-        const itemsCopy = cargoItems.map(item => ({ ...item }));
+        const itemsCopy = cargoItems
+            .filter(item => item.included !== false && (parseInt(item.qty) || 0) > 0)
+            .map((item, idx) => ({ ...item, _origIdx: idx }));
+
         if (algorithm === 'garment') {
             // Garment algorithm: default items to garment anti-wrinkle mode
             itemsCopy.forEach(it => {
@@ -291,28 +309,39 @@ class ContainerSimulation {
                     it.rotation = 'garment';
                 }
             });
-        } else if (algorithm === 'stability') {
-            // Stability: Heaviest total weight cargo first (deepest inside container)
-            itemsCopy.sort((a, b) => ((b.weight || 0) * (b.qty || 1)) - ((a.weight || 0) * (a.qty || 1)));
-        } else if (algorithm === 'max-volume') {
-            // Max volume: Largest cargo volume first
-            itemsCopy.sort((a, b) => {
+        }
+
+        const posRank = (pos) => {
+            if (pos === 'rear') return 0; // Deepest against front wall (X = 0)
+            if (pos === 'door') return 2; // Closest to container doors (loaded last / unload first)
+            return 1;                     // Normal sequence
+        };
+
+        itemsCopy.sort((a, b) => {
+            // 1. Explicit position priority always takes precedence (rear -> normal -> door)
+            const rA = posRank(a.position);
+            const rB = posRank(b.position);
+            if (rA !== rB) return rA - rB;
+
+            // 2. Within same priority tier, apply selected algorithm ordering
+            if (algorithm === 'stability') {
+                const diff = ((b.weight || 0) * (b.qty || 1)) - ((a.weight || 0) * (a.qty || 1));
+                if (Math.abs(diff) > 0.001) return diff;
+            } else if (algorithm === 'max-volume') {
                 const volA = ((a.width || 50) * (a.length || 60) * (a.height || 40) * (a.qty || 1));
                 const volB = ((b.width || 50) * (b.length || 60) * (b.height || 40) * (b.qty || 1));
-                return volB - volA;
-            });
-        } else if (algorithm === 'easy-loading') {
-            // Easy loading (LIFO): Stop 1 deepest inside (back wall), Stop 5 near door
-            itemsCopy.sort((a, b) => (a.stop || 'Stop 1').localeCompare(b.stop || 'Stop 1'));
-        } else {
-            // 'best-balance' (Default): Respect user item sequence, grouping by Stop if specified
-            itemsCopy.sort((a, b) => {
+                if (Math.abs(volB - volA) > 0.001) return volB - volA;
+            } else if (algorithm === 'easy-loading') {
+                const cmp = (a.stop || 'Stop 1').localeCompare(b.stop || 'Stop 1');
+                if (cmp !== 0) return cmp;
+            } else {
                 const stopA = a.stop || 'Stop 1';
                 const stopB = b.stop || 'Stop 1';
                 if (stopA !== stopB) return stopA.localeCompare(stopB);
-                return 0; // maintain user card / table order
-            });
-        }
+            }
+            return a._origIdx - b._origIdx;
+        });
+
         return itemsCopy;
     }
 
@@ -420,7 +449,7 @@ class ContainerSimulation {
             ...it,
             remainingQty: parseInt(it.qty) || 0
         }));
-        const totalRequested = cargoItems.reduce((acc, it) => acc + (parseInt(it.qty) || 0), 0);
+        const totalRequested = itemsSorted.reduce((acc, it) => acc + (parseInt(it.qty) || 0), 0);
 
         containerTypesList.forEach((contType, idx) => {
             const spec = this.containerSpecs[contType] || this.containerSpecs['40hc'];
@@ -502,9 +531,151 @@ class ContainerSimulation {
         return Math.max(1, count);
     }
 
+    // Smart Mixed Fleet Optimizer: evaluates homogeneous & mixed container fleets (e.g. 1×40HC + 1×20DC vs 2×40HC vs 1×45HC)
+    // Reuses prefix container packing results so multi-container comparison completes rapidly.
+    computeOptimalMixedFleet(cargoItems, algorithm = 'best-balance', options = {}) {
+        const prevEquipment = this.currentEquipment;
+        const prevPlacedBoxes = this.placedBoxes;
+        const prevSpatialGrid = this._spatialGrid;
+
+        const itemsSorted = this.sortCargoItemsByAlgorithm(cargoItems, algorithm);
+        const initialCargo = itemsSorted.map(it => ({ ...it, remainingQty: parseInt(it.qty) || 0 }));
+        const totalRequested = initialCargo.reduce((acc, it) => acc + it.remainingQty, 0);
+        if (totalRequested <= 0) {
+            return [];
+        }
+
+        const totalCargoVol = initialCargo.reduce((acc, it) => {
+            const l = (parseFloat(it.length) || 60) / 100;
+            const w = (parseFloat(it.width) || 50) / 100;
+            const h = (parseFloat(it.height) || 40) / 100;
+            return acc + l * w * h * it.remainingQty;
+        }, 0);
+
+        const stdTypes = ['20dc', '40dc', '40hc', '45hc'];
+        const typeVol = (t) => {
+            const s = this.containerSpecs[t];
+            return s.l * s.w * s.h;
+        };
+        const formatFleetLabel = (fleet) => {
+            const counts = {};
+            const order = ['45hc', '40hc', '40dc', '20dc'];
+            fleet.forEach(t => { counts[t] = (counts[t] || 0) + 1; });
+            return order.filter(t => counts[t]).map(t => `${counts[t]}×${t.toUpperCase()}`).join(' + ');
+        };
+
+        const plansMap = new Map();
+        const recordPlan = (fleet, totalPlaced, totalUnplaced) => {
+            if (totalUnplaced > 0 || fleet.length === 0) return;
+            // Canonical sort largest-first so ['40hc','20dc'] and ['20dc','40hc'] dedup cleanly
+            const rank = { '45hc': 0, '40hc': 1, '40dc': 2, '20dc': 3 };
+            const normalized = fleet.slice().sort((a, b) => (rank[a] ?? 9) - (rank[b] ?? 9));
+            const key = normalized.join(',');
+            if (plansMap.has(key)) return;
+            const fleetCbm = normalized.reduce((acc, t) => acc + typeVol(t), 0);
+            const fleetUtil = fleetCbm > 0 ? (totalCargoVol / fleetCbm) * 100 : 0;
+            // Approximate relative sea-freight cost units (20DC ≈ 1.0, 40DC ≈ 1.65, 40HC ≈ 1.72, 45HC ≈ 2.0)
+            const costMap = { '20dc': 1.0, '40dc': 1.65, '40hc': 1.72, '45hc': 2.0 };
+            const estCost = normalized.reduce((acc, t) => acc + (costMap[t] || 1.72), 0);
+            plansMap.set(key, {
+                fleet: normalized,
+                label: formatFleetLabel(normalized),
+                containerCount: normalized.length,
+                fleetCbm: fleetCbm.toFixed(1),
+                fleetUtil: fleetUtil.toFixed(1),
+                fleetUtilNum: fleetUtil,
+                estCost: estCost,
+                fitsAll: true
+            });
+        };
+
+        const packRemWithType = (rem, contType) => {
+            const spec = this.containerSpecs[contType];
+            return this.packSingleContainerInternal(rem, spec, algorithm, options);
+        };
+
+        // 1. Check if a single standard container fits 100%
+        for (const t of stdTypes) {
+            if (typeVol(t) >= totalCargoVol * 0.96) {
+                const res = packRemWithType(initialCargo, t);
+                if (res.stats.unplaced === 0) {
+                    recordPlan([t], res.stats.placed, 0);
+                }
+            }
+        }
+
+        // 2. Prefix-reusing multi-container search with base types ('40hc' and '45hc')
+        const evaluateBase = (baseType) => {
+            let rem = initialCargo;
+            const prefix = [];
+            const maxConts = 12;
+
+            while (prefix.length < maxConts) {
+                const remVol = rem.reduce((acc, it) => {
+                    const l = (parseFloat(it.length) || 60) / 100;
+                    const w = (parseFloat(it.width) || 50) / 100;
+                    const h = (parseFloat(it.height) || 40) / 100;
+                    return acc + l * w * h * it.remainingQty;
+                }, 0);
+
+                // If remaining cargo might fit in 1 last container, try ALL smaller/equal/larger endings!
+                if (prefix.length >= 1 && remVol <= typeVol('45hc') * 0.95) {
+                    for (const tailType of stdTypes) {
+                        if (typeVol(tailType) * 0.95 < remVol) continue;
+                        const tailRes = packRemWithType(rem, tailType);
+                        if (tailRes.stats.unplaced === 0) {
+                            recordPlan(prefix.concat([tailType]), totalRequested, 0);
+                        }
+                    }
+                }
+
+                const stepRes = packRemWithType(rem, baseType);
+                if (!stepRes || stepRes.stats.placed <= 0) break;
+                prefix.push(baseType);
+                rem = stepRes.unplacedItems;
+                if (rem.length === 0) {
+                    recordPlan(prefix, totalRequested, 0);
+                    break;
+                }
+            }
+        };
+
+        evaluateBase('40hc');
+        if (totalCargoVol > 58) {
+            evaluateBase('45hc');
+        }
+        // Test 40dc base only when 1x40DC + 1x20DC or 2x40DC is realistically feasible (<= 118 m³)
+        if (totalCargoVol > 30 && totalCargoVol <= 118) {
+            evaluateBase('40dc');
+        }
+
+        this.currentEquipment = prevEquipment;
+        this.placedBoxes = prevPlacedBoxes;
+        this._spatialGrid = prevSpatialGrid;
+
+        const plans = Array.from(plansMap.values());
+        // Rank: fewest wasted space & lowest relative freight cost first, breaking ties by highest utilization
+        plans.sort((a, b) => {
+            const costDiff = a.estCost - b.estCost;
+            if (Math.abs(costDiff) > 0.08) return costDiff;
+            return b.fleetUtilNum - a.fleetUtilNum;
+        });
+
+        return plans.slice(0, 4).map((p, idx) => ({ ...p, recommended: idx === 0 }));
+    }
+
     packSingleContainerInternal(cargoItems, spec, algorithm, options = {}) {
-        const CL = spec.l, CW = spec.w, CH = spec.h;
+        const marginL = Math.max(0, Math.min(15, parseFloat(options.marginL) || 0));
+        const marginW = Math.max(0, Math.min(15, parseFloat(options.marginW) || 0));
+        const marginH = Math.max(0, Math.min(15, parseFloat(options.marginH) || 0));
+        const CL = Math.round(spec.l * (1 - marginL / 100) * 1000) / 1000;
+        const CW = Math.round(spec.w * (1 - marginW / 100) * 1000) / 1000;
+        const CH = Math.round(spec.h * (1 - marginH / 100) * 1000) / 1000;
         const enforcePayload = options.enforcePayload === true;
+        const enforceDoorClearance = options.enforceDoorClearance === true;
+        const doorW = Math.min(CW, (spec.doorW || spec.w) * (1 - marginW / 100));
+        const doorH = Math.min(CH, (spec.doorH || spec.h) * (1 - marginH / 100));
+        const doorOpts = enforceDoorClearance ? { enforce: true, doorW, doorH, headerZone: 0.50 } : null;
 
         this.placedBoxes = []; // Temporary for collision / support validation
         this.initSpatialGrid(CW);
@@ -518,6 +689,7 @@ class ContainerSimulation {
         let rotatedCount = 0;
         let hitPayloadLimit = false;
         let maxX = 0;
+        let doorZoneMinX = null;
 
         let cogSumX = 0;
         let cogSumY = 0;
@@ -556,7 +728,8 @@ class ContainerSimulation {
             const unitWeight = isNaN(parsedWt) ? 0 : Math.max(0, parsedWt);
             const color = item.color || '#dc2626';
             const shapeType = item.type || 'box';
-            const stackable = item.stackable !== false;
+            const stackable = item.stackable !== false; // Allow OTHER boxes to stack ON TOP of this box
+            const floorOnly = item.floorOnly === true;  // Restrict THIS box to container floor only (y = 0)
             const rotMode = (algorithm === 'garment' && (!item.rotation || item.rotation === 'horizontal' || item.rotation === 'fit'))
                 ? 'garment'
                 : (item.rotation || 'fit');
@@ -597,7 +770,14 @@ class ContainerSimulation {
 
             // Seed canonical Z-lanes at all existing front (x, y) positions so previous SKUs'
             // off-grid Z coordinates cannot steal space, intrude into adjacent lanes, or drop a lane.
+            const isDoorPriority = (item.position === 'door');
+            if (isDoorPriority && doorZoneMinX === null) {
+                doorZoneMinX = Math.round(maxX * 1000) / 1000;
+            }
             const frontXY = new Map();
+            if (isDoorPriority && doorZoneMinX !== null && doorZoneMinX < CL - 0.05) {
+                frontXY.set(`${doorZoneMinX.toFixed(3)}|0.000`, { x: doorZoneMinX, y: 0 });
+            }
             for (let p = 0; p < candidatePoints.length; p++) {
                 const cp = candidatePoints[p];
                 const key = `${cp.x.toFixed(3)}|${cp.y.toFixed(3)}`;
@@ -650,13 +830,15 @@ class ContainerSimulation {
                 this.sortCandidatePoints(candidatePoints);
 
                 // PASS 1: Strict canonical Z-lane & band orientation discipline (eliminates intra-SKU gaps & lane drops)
+                // For 'door' priority items, keep them in the front door zone (x >= doorZoneMinX) before falling back in Pass 2.
                 for (let i = 0; i < candidatePoints.length; i++) {
                     const pt = candidatePoints[i];
+                    if (isDoorPriority && doorZoneMinX !== null && pt.x < doorZoneMinX - 0.01) continue;
                     const lane = matchCanonicalLane(pt.z);
                     if (!lane) continue;
 
                     const ori = lane.ori;
-                    if (this.canPlaceBox(pt, ori, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec, enforcePayload)) {
+                    if (this.canPlaceBox(pt, ori, CL, CW, CH, floorOnly, totalPlacedWeight, unitWeight, spec, enforcePayload, doorOpts)) {
                         commitPlacement(pt, ori, i);
                         placedThisBox = true;
                         break;
@@ -685,7 +867,7 @@ class ContainerSimulation {
 
                         for (let j = 0; j < oris.length; j++) {
                             const ori = oris[j];
-                            if (this.canPlaceBox(pt, ori, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec, enforcePayload)) {
+                            if (this.canPlaceBox(pt, ori, CL, CW, CH, floorOnly, totalPlacedWeight, unitWeight, spec, enforcePayload, doorOpts)) {
                                 commitPlacement(pt, ori, i);
                                 placedThisBox = true;
                                 break;
@@ -704,7 +886,8 @@ class ContainerSimulation {
             }
         }
 
-        const containerVolume = CL * CW * CH;
+        const physicalContainerVolume = spec.l * spec.w * spec.h;
+        const containerVolume = physicalContainerVolume;
         const utilization = ((totalPlacedVolume / containerVolume) * 100).toFixed(1);
         const weightUtilization = ((totalPlacedWeight / spec.payload) * 100).toFixed(1);
         const totalUnplacedCount = unplacedItems.reduce((acc, it) => acc + it.remainingQty, 0);
@@ -716,7 +899,7 @@ class ContainerSimulation {
         const avgZ = totalPlacedWeight > 0 ? (cogSumZ / totalPlacedWeight) : 0;
 
         if (totalPlacedWeight > 0) {
-            const ratioX = avgX / CL;
+            const ratioX = avgX / spec.l;
             if (ratioX > 0.62) cogText = 'Lệch về phía cửa cont';
             else if (ratioX < 0.38) cogText = 'Lệch về phía đầu cont';
         }
@@ -730,6 +913,10 @@ class ContainerSimulation {
                 unplaced: totalUnplacedCount,
                 volume: totalPlacedVolume.toFixed(3),
                 containerVolume: containerVolume.toFixed(1),
+                effectiveDims: { l: CL.toFixed(3), w: CW.toFixed(3), h: CH.toFixed(3) },
+                doorDims: { w: doorW.toFixed(3), h: doorH.toFixed(3) },
+                margins: { l: marginL, w: marginW, h: marginH },
+                enforceDoorClearance: enforceDoorClearance,
                 weight: totalPlacedWeight.toFixed(1),
                 maxPayload: spec.payload,
                 utilization: utilization,
@@ -873,14 +1060,23 @@ class ContainerSimulation {
     }
 
     // Helper: Validates if a box can physically be placed at pt with given orientation
-    canPlaceBox(pt, ori, CL, CW, CH, stackable, totalPlacedWeight, unitWeight, spec, enforcePayload = false) {
+    // floorOnly=true restricts this item to floor (y=0); stackable (on placed boxes) prevents other items from stacking on top.
+    canPlaceBox(pt, ori, CL, CW, CH, floorOnly, totalPlacedWeight, unitWeight, spec, enforcePayload = false, doorOpts = null) {
         if (pt.x + ori.l > CL + 0.001) return false;
         if (pt.y + ori.h > CH + 0.001) return false;
         if (pt.z + ori.w > CW / 2 + 0.001) return false;
         if (pt.z < -CW / 2 - 0.001) return false;
 
-        if (!stackable && pt.y > 0.002) return false;
+        if (floorOnly && pt.y > 0.002) return false;
         if (enforcePayload && totalPlacedWeight + unitWeight > spec.payload * 1.05) return false;
+
+        // ISO Doorway Clearance check:
+        // 1) Any single unit must physically fit through doorW × doorH opening
+        // 2) Within the doorway steel header beam zone (last 0.50m near doors), stack top must stay <= doorH
+        if (doorOpts && doorOpts.enforce) {
+            if (ori.h > doorOpts.doorH + 0.001 || ori.w > doorOpts.doorW + 0.001) return false;
+            if (pt.x + ori.l > CL - doorOpts.headerZone && pt.y + ori.h > doorOpts.doorH + 0.001) return false;
+        }
 
         if (this.checkCollision(pt.x, pt.y, pt.z, ori.l, ori.h, ori.w)) return false;
         if (!this.isSupported(pt.x, pt.y, pt.z, ori.l, ori.h, ori.w)) return false;
