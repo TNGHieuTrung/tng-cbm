@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="styles.css?v=20261126-p1">
+    <link rel="stylesheet" href="styles.css?v=20261127-p2">
 </head>
 <body>
     <!-- Navigation -->
@@ -119,9 +119,11 @@
                     </div>
                     <div class="toolbar-right">
                         <a href="mailto:hieutrung@tng.vn" class="toolbar-btn" style="text-decoration:none;"><i class="fas fa-headset"></i> Hỗ trợ TNG</a>
+                        <button class="toolbar-btn" id="btnOpenPasteExcel" title="Copy từ Excel / Google Sheets và dán trực tiếp (Ctrl+V)"><i class="fas fa-paste"></i> <span data-i18n="app.pasteExcel">Dán Excel</span></button>
                         <button class="toolbar-btn" id="btnImportExcel" title="Nhập Excel / CSV"><i class="fas fa-file-excel"></i> <span data-i18n="app.importExcel">Nhập Excel</span></button>
                         <button class="toolbar-btn" id="btnExportExcel" title="Xuất file Excel"><i class="fas fa-file-export"></i> <span data-i18n="app.exportExcel">Xuất Excel</span></button>
                         <button class="toolbar-btn" id="btnDownloadTemplate" title="Tải mẫu Excel"><i class="fas fa-download"></i> <span data-i18n="app.template">Mẫu Excel</span></button>
+                        <button class="toolbar-btn toolbar-btn-pdf" id="btnExportLoadingPlanPdfTop" title="Xuất phiếu sơ đồ đóng hàng PDF kèm hình 3D 3 góc cho tổ kho"><i class="fas fa-file-pdf"></i> <span data-i18n="app.exportPdf">Phiếu đóng hàng PDF</span></button>
                         <button class="toolbar-btn" data-i18n="app.save" id="btnSaveConfig"><i class="fas fa-save"></i> Lưu</button>
                         <button class="toolbar-btn" data-i18n="app.load" id="btnLoadConfig"><i class="fas fa-folder-open"></i> Tải</button>
                     </div>
@@ -240,7 +242,14 @@
                             <span class="active-sku-badge" id="activeSkuCountBadge">2/2 mã đang xếp</span>
                         </div>
                         <div class="cargo-header-right">
+                            <div class="unit-switcher" id="dimUnitSwitcher" title="Đơn vị kích thước thùng (tự động quy đổi chính xác)">
+                                <span class="unit-switcher-label"><i class="fas fa-ruler"></i></span>
+                                <button type="button" class="unit-btn active" data-unit="cm">cm</button>
+                                <button type="button" class="unit-btn" data-unit="mm">mm</button>
+                                <button type="button" class="unit-btn" data-unit="in">inch</button>
+                            </div>
                             <div class="bulk-include-controls">
+                                <button type="button" class="bulk-mini-btn paste-trigger-btn" id="btnPasteExcelInline" title="Copy từ Excel và dán trực tiếp (Ctrl+V)"><i class="fas fa-paste"></i> Dán Excel</button>
                                 <button type="button" class="bulk-mini-btn" id="btnIncludeAll" title="Chọn xếp tất cả các mã hàng"><i class="fas fa-check-double"></i> Chọn tất cả</button>
                                 <button type="button" class="bulk-mini-btn" id="btnExcludeAll" title="Bỏ chọn tất cả để test từng mã"><i class="fas fa-ban"></i> Bỏ chọn</button>
                             </div>
@@ -578,6 +587,7 @@
                     <div class="tabs-actions">
                         <button class="btn-add-cont" id="btnAddCont" title="Thêm một Container mới"><i class="fas fa-plus"></i> <span data-i18n="sim.addCont">Thêm Container</span></button>
                         <button class="btn-auto-split" id="btnAutoSplit" title="Tự động tìm tổ hợp container hỗn hợp tối ưu nhất (vd: 40HC + 20DC hoặc 2×40HC)"><i class="fas fa-bolt"></i> <span data-i18n="sim.autoSplit">Tự động phân bổ tối ưu</span></button>
+                        <button class="btn-export-pdf-sim" id="btnExportLoadingPlanPdf" title="Xuất phiếu sơ đồ đóng hàng PDF kèm 3 góc nhìn 3D từng container cho tổ kho"><i class="fas fa-file-pdf"></i> <span data-i18n="sim.exportPdf">Xuất PDF Kho</span></button>
                     </div>
                 </div>
 
@@ -1085,7 +1095,108 @@
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" id="btnModalExport"><i class="fas fa-file-excel"></i> Xuất Excel</button>
-                <button class="btn-primary" id="btnModalPrint"><i class="fas fa-print"></i> In phiếu đóng hàng / PDF</button>
+                <button class="btn-primary" id="btnModalPrint"><i class="fas fa-file-pdf"></i> Phiếu sơ đồ 3D / PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Paste Directly from Excel / Google Sheets Modal -->
+    <div class="modal-backdrop" id="pasteExcelModal" style="display:none;">
+        <div class="modal-dialog paste-modal-dialog">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <div class="modal-badge"><i class="fas fa-paste"></i> NHẬP NHANH TỪ EXCEL / GOOGLE SHEETS</div>
+                    <h2>DÁN TRỰC TIẾP BẢNG PACKING LIST (CTRL + V)</h2>
+                    <p class="modal-subtitle">Hỗ trợ copy nguyên bảng từ Excel (tách cột bằng Tab, chấm phẩy hoặc phẩy) — tự động nhận diện tiêu đề & quy đổi đơn vị <strong>cm / mm / inch</strong>.</p>
+                </div>
+                <button class="modal-close" id="btnClosePasteModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="paste-controls-row">
+                    <div class="paste-ctrl-group">
+                        <label>Đơn vị kích thước dữ liệu dán:</label>
+                        <div class="unit-switcher" id="pasteUnitSwitcher">
+                            <button type="button" class="unit-btn active" data-paste-unit="cm">cm</button>
+                            <button type="button" class="unit-btn" data-paste-unit="mm">mm</button>
+                            <button type="button" class="unit-btn" data-paste-unit="in">inch</button>
+                        </div>
+                    </div>
+                    <div class="paste-ctrl-group">
+                        <label>Chế độ nhập:</label>
+                        <select id="pasteImportMode" class="select-sm">
+                            <option value="replace">🔄 Thay thế danh sách hiện tại</option>
+                            <option value="append">➕ Thêm vào cuối danh sách</option>
+                        </select>
+                    </div>
+                    <button type="button" class="bulk-mini-btn" id="btnPasteSampleInch" title="Điền thử 4 mã hàng may mặc xuất Mỹ theo đơn vị inch"><i class="fas fa-flask"></i> Dữ liệu mẫu (inch)</button>
+                </div>
+
+                <div class="paste-format-hint">
+                    <strong>Định dạng cột chuẩn:</strong> <code>Tên mã hàng</code> &nbsp;⇥&nbsp; <code>Dài</code> &nbsp;⇥&nbsp; <code>Rộng</code> &nbsp;⇥&nbsp; <code>Cao</code> &nbsp;⇥&nbsp; <code>Số lượng</code> &nbsp;⇥&nbsp; <code>Đơn trọng kg (không bắt buộc)</code> — có thể kèm cột <code>STT</code> hoặc dòng tiêu đề.
+                </div>
+
+                <textarea id="pasteExcelInput" class="paste-textarea" rows="7" placeholder="Nhấn Ctrl+V (hoặc Cmd+V) để dán các dòng từ Excel vào đây...&#10;Ví dụ (đơn vị inch):&#10;0755946	14	13	8.5	175	15&#10;0770867	16	14	8.5	1042	0"></textarea>
+
+                <div class="paste-preview-box">
+                    <div class="paste-preview-header">
+                        <span><i class="fas fa-table"></i> Xem trước dữ liệu đã nhận diện</span>
+                        <strong id="pastePreviewSummary">Chưa có dữ liệu dán</strong>
+                    </div>
+                    <div class="paste-preview-table-wrap">
+                        <table class="paste-preview-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Mã hàng</th>
+                                    <th>Kích thước gốc</th>
+                                    <th>Quy đổi (cm)</th>
+                                    <th>SL</th>
+                                    <th>Đơn trọng</th>
+                                    <th>CBM (m³)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pastePreviewTableBody">
+                                <tr><td colspan="7" style="text-align:center;color:#64748b;padding:16px;">Dán dữ liệu ở ô trên để xem trước ngay lập tức</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="btnCancelPasteModal">Đóng</button>
+                <button class="btn-primary" id="btnConfirmPasteExcel" disabled><i class="fas fa-check-circle"></i> Nạp vào mô phỏng 3D</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Warehouse 3D Loading Plan PDF Print Preview Modal -->
+    <div class="modal-backdrop loading-plan-backdrop" id="loadingPlanModal" style="display:none;">
+        <div class="modal-dialog loading-plan-dialog">
+            <div class="modal-header no-print">
+                <div class="modal-title-group">
+                    <div class="modal-badge"><i class="fas fa-warehouse"></i> PHIẾU SƠ ĐỒ ĐÓNG HÀNG KHO (LOADING PLAN PDF)</div>
+                    <h2>SƠ ĐỒ XẾP HÀNG 3D & HƯỚNG DẪN BỐC XẾP TỪNG CONTAINER</h2>
+                    <p class="modal-subtitle">Tự động chụp 3 góc nhìn (Phối cảnh, Trên, Bên) + tọa độ vị trí từng mã hàng để phát trực tiếp cho tổ kho.</p>
+                </div>
+                <button class="modal-close" id="btnCloseLoadingPlanModal">&times;</button>
+            </div>
+            <div class="loading-plan-toolbar no-print">
+                <div class="plan-meta-inputs">
+                    <label>Số Booking / Lô hàng: <input type="text" id="planJobRefInput" value="TNG-LP-2026"></label>
+                    <label>Khách hàng / PO: <input type="text" id="planCustomerInput" placeholder="VD: Decathlon / PO #2026-11"></label>
+                </div>
+                <div class="plan-toolbar-actions">
+                    <div class="unit-switcher" id="planLayoutModeSwitcher">
+                        <button type="button" class="unit-btn active" data-plan-mode="detailed">Chi tiết (3 góc 3D)</button>
+                        <button type="button" class="unit-btn" data-plan-mode="compact">Tóm tắt gọn</button>
+                    </div>
+                    <button type="button" class="btn-primary" id="btnPrintLoadingPlan"><i class="fas fa-print"></i> In / Lưu thành PDF</button>
+                </div>
+            </div>
+            <div class="modal-body loading-plan-body">
+                <div id="loadingPlanPrintSheet" class="loading-plan-sheet">
+                    <!-- Populated dynamically with captured 3D views & per-container manifests -->
+                </div>
             </div>
         </div>
     </div>
@@ -1104,8 +1215,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="i18n.js?v=20261126-p1"></script>
-    <script src="simulation3d.js?v=20261126-p1"></script>
-    <script src="main.js?v=20261126-p1"></script>
+    <script src="i18n.js?v=20261127-p2"></script>
+    <script src="simulation3d.js?v=20261127-p2"></script>
+    <script src="main.js?v=20261127-p2"></script>
 </body>
 </html>

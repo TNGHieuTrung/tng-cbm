@@ -1812,3 +1812,494 @@ img { max-width: 100%; }
 .cargo-data-table .tbl-weight {
     min-width: 62px;
 }
+
+
+/* ===== Phase 2 Upgrades: Unit Switcher (cm/mm/inch), Paste Excel Modal & Warehouse 3D Loading Plan PDF ===== */
+.toolbar-btn-pdf {
+    background: linear-gradient(135deg, #0d9488, #0284c7) !important;
+    color: #ffffff !important;
+    border-color: transparent !important;
+}
+
+.toolbar-btn-pdf:hover {
+    filter: brightness(1.08);
+}
+
+.btn-export-pdf-sim {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 13px;
+    border-radius: 10px;
+    border: 1px solid rgba(45, 212, 191, 0.55);
+    background: linear-gradient(135deg, rgba(13, 148, 136, 0.9), rgba(2, 132, 199, 0.9));
+    color: #ffffff;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+}
+
+.btn-export-pdf-sim:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(13, 148, 136, 0.35);
+}
+
+.unit-switcher {
+    display: inline-flex;
+    align-items: center;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 9px;
+    padding: 2px;
+    gap: 2px;
+}
+
+.unit-switcher-label {
+    font-size: 0.72rem;
+    color: #64748b;
+    padding: 0 6px;
+}
+
+.unit-btn {
+    border: none;
+    background: transparent;
+    color: #475569;
+    font-size: 0.76rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.unit-btn:hover {
+    color: #0f172a;
+}
+
+.unit-btn.active {
+    background: #0d9488;
+    color: #ffffff;
+    box-shadow: 0 1px 3px rgba(13, 148, 136, 0.35);
+}
+
+.paste-trigger-btn {
+    border-color: rgba(13, 148, 136, 0.45) !important;
+    color: #0f766e !important;
+    background: #f0fdfa !important;
+}
+
+.paste-modal-dialog {
+    max-width: 860px;
+    width: 95%;
+}
+
+.paste-controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.paste-ctrl-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.paste-ctrl-group label {
+    color: #e2e8f0;
+}
+
+.paste-format-hint {
+    font-size: 0.8rem;
+    color: #475569;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+}
+
+.paste-format-hint code {
+    background: #e2e8f0;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.76rem;
+    color: #0f172a;
+}
+
+.paste-textarea {
+    width: 100%;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1.5px solid #cbd5e1;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: #0f172a;
+    background: #ffffff;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+
+.paste-textarea:focus {
+    border-color: #0d9488;
+    box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+}
+
+.paste-preview-box {
+    margin-top: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.paste-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #f1f5f9;
+    font-size: 0.82rem;
+    color: #334155;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.paste-preview-table-wrap {
+    max-height: 210px;
+    overflow-y: auto;
+}
+
+.paste-preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+    background: #ffffff;
+    color: #0f172a;
+}
+
+.paste-preview-table th,
+.paste-preview-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+    color: #0f172a;
+}
+
+.paste-preview-table th {
+    background: #f8fafc;
+    color: #475569;
+    font-weight: 700;
+    position: sticky;
+    top: 0;
+}
+
+/* Warehouse 3D Loading Plan PDF Modal & Sheet */
+.loading-plan-dialog {
+    max-width: 1060px;
+    width: 96%;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.loading-plan-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 24px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.plan-meta-inputs {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.plan-meta-inputs label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #334155;
+}
+
+.plan-meta-inputs input {
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    padding: 5px 9px;
+    font-size: 0.8rem;
+    color: #0f172a;
+    width: 165px;
+}
+
+.plan-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.loading-plan-body {
+    overflow-y: auto;
+    background: #e2e8f0;
+    padding: 20px;
+}
+
+.loading-plan-sheet {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.plan-container-page {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 22px 24px;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+    color: #0f172a;
+}
+
+.plan-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #0f172a;
+    margin-bottom: 14px;
+}
+
+.plan-brand-title {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.01em;
+}
+
+.plan-brand-sub {
+    font-size: 0.78rem;
+    color: #475569;
+    margin-top: 2px;
+}
+
+.plan-cont-badge-box {
+    text-align: right;
+}
+
+.plan-cont-pill {
+    display: inline-block;
+    background: #0f172a;
+    color: #ffffff;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 999px;
+}
+
+.plan-meta-sub {
+    font-size: 0.74rem;
+    color: #475569;
+    margin-top: 4px;
+}
+
+.plan-kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.plan-kpi-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+.plan-kpi-card span {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+}
+
+.plan-kpi-card strong {
+    display: block;
+    font-size: 0.88rem;
+    color: #0f172a;
+    margin-top: 2px;
+}
+
+.plan-views-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.plan-views-grid.compact-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.plan-view-card {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #0a1628;
+}
+
+.plan-view-label {
+    background: #0f172a;
+    color: #e2e8f0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 5px 9px;
+    letter-spacing: 0.02em;
+}
+
+.plan-view-card img {
+    display: block;
+    width: 100%;
+    height: 175px;
+    object-fit: contain;
+    background: #0a1628;
+}
+
+.plan-section-heading {
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 10px 0 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.plan-sku-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+}
+
+.plan-sku-table th,
+.plan-sku-table td {
+    border: 1px solid #cbd5e1;
+    padding: 6px 8px;
+    text-align: left;
+}
+
+.plan-sku-table th {
+    background: #f1f5f9;
+    color: #1e293b;
+    font-weight: 700;
+}
+
+.plan-color-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    margin-right: 6px;
+    vertical-align: middle;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.plan-sign-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px dashed #cbd5e1;
+    text-align: center;
+    font-size: 0.76rem;
+}
+
+.plan-sign-box strong {
+    display: block;
+    color: #0f172a;
+    margin-bottom: 34px;
+}
+
+.plan-sign-box small {
+    color: #64748b;
+}
+
+/* Crisp Print / Save-as-PDF Styles */
+@media print {
+    body.printing-loading-plan > *:not(#loadingPlanModal) {
+        display: none !important;
+    }
+
+    body.printing-loading-plan #loadingPlanModal {
+        position: static !important;
+        display: block !important;
+        background: #ffffff !important;
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+
+    body.printing-loading-plan .loading-plan-dialog {
+        max-width: none !important;
+        width: 100% !important;
+        max-height: none !important;
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+    }
+
+    body.printing-loading-plan .no-print {
+        display: none !important;
+    }
+
+    body.printing-loading-plan .loading-plan-body {
+        background: #ffffff !important;
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+
+    body.printing-loading-plan .plan-container-page {
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+        padding: 8mm 6mm !important;
+        page-break-after: always;
+        break-after: page;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    body.printing-loading-plan .plan-container-page:last-child {
+        page-break-after: auto;
+        break-after: auto;
+    }
+
+    body.printing-loading-plan .plan-view-card img {
+        height: 145px !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .plan-kpi-strip {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .plan-views-grid {
+        grid-template-columns: 1fr;
+    }
+}

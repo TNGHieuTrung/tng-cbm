@@ -60,8 +60,8 @@ class ContainerSimulation {
         this.camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 2000);
         this.camera.position.set(200, 150, 300);
 
-        // Renderer
-        this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
+        // Renderer (preserveDrawingBuffer enables crisp client-side 3D snapshots for PDF loading plans)
+        this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, preserveDrawingBuffer: true });
         this.renderer.setSize(w, h);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.shadowMap.enabled = true;
@@ -1594,6 +1594,179 @@ class ContainerSimulation {
 
         const target = positions[preset] || positions.isometric;
         this.animateCamera(target, center);
+    }
+
+    // Synchronous camera positioning & single-frame render for PDF snapshot capture
+    setCameraImmediate(preset) {
+        if (!this.camera || !this.renderer || !this.scene) return;
+        const spec = this.containerSpecs[this.currentEquipment] || this.containerSpecs['40hc'];
+        const s = this.scale;
+        const L = spec.l * s, H = spec.h * s;
+
+        let pos, look;
+        if (preset === 'top') {
+            pos = new THREE.Vector3(L / 2, Math.max(L * 0.95, H * 3.8), 0.01);
+            look = new THREE.Vector3(L / 2, 0, 0);
+        } else if (preset === 'side') {
+            pos = new THREE.Vector3(L / 2, H * 0.48, Math.max(L * 0.95, 260));
+            look = new THREE.Vector3(L / 2, H * 0.45, 0);
+        } else {
+            pos = new THREE.Vector3(L * 1.15, H * 1.38, L * 0.72);
+            look = new THREE.Vector3(L / 2, H * 0.42, 0);
+        }
+
+        this.camera.position.copy(pos);
+        if (this.controls) {
+            this.controls.target.copy(look);
+            this.controls.update();
+        } else {
+            this.camera.lookAt(look);
+        }
+        this.renderer.render(this.scene, this.camera);
+    }
+
+    // Build warehouse-ready per-container SKU loading manifest (ordered back-to-front by loading step)
+    getContainerSkuSummary(contIndex) {
+        if (!this.multiContainerData || !this.multiContainerData[contIndex]) return [];
+        const boxes = this.multiContainerData[contIndex].boxMeshesData || [];
+        const map = new Map();
+
+        for (let i = 0; i < boxes.length; i++) {
+            const b = boxes[i];
+            let entry = map.get(b.name);
+            if (!entry) {
+                entry = {
+                    name: b.name,
+                    color: b.color || '#dc2626',
+                    stop: b.stop || 'Stop 1',
+                    qty: 0,
+                    weightTotal: 0,
+                    cbmTotal: 0,
+                    minX: Infinity,
+                    maxX: -Infinity,
+                    firstStep: b.step,
+                    lastStep: b.step,
+                    zBuckets: new Set(),
+                    yBuckets: new Set(),
+                    oriCounts: new Map(),
+                    oriLanes: new Map(),
+                    sampleL: b.l,
+                    sampleW: b.w,
+                    sampleH: b.h
+                };
+                map.set(b.name, entry);
+            }
+            entry.qty++;
+            entry.weightTotal += (parseFloat(b.weight) || 0);
+            entry.cbmTotal += (b.l * b.w * b.h);
+            if (b.x < entry.minX) entry.minX = b.x;
+            if (b.x + b.l > entry.maxX) entry.maxX = b.x + b.l;
+            if (b.step < entry.firstStep) entry.firstStep = b.step;
+            if (b.step > entry.lastStep) entry.lastStep = b.step;
+            const zKey = Math.round(b.z * 33); // ~3cm bucket
+            const yKey = Math.round(b.y * 33);
+            entry.zBuckets.add(zKey);
+            entry.yBuckets.add(yKey);
+
+            const oriKey = `${Math.round(b.l * 1000)}x${Math.round(b.w * 1000)}`;
+            entry.oriCounts.set(oriKey, (entry.oriCounts.get(oriKey) || 0) + 1);
+            if (!entry.oriLanes.has(oriKey)) entry.oriLanes.set(oriKey, new Set());
+            entry.oriLanes.get(oriKey).add(zKey);
+        }
+
+        const list = [];
+        map.forEach(e => {
+            const oriEntries = Array.from(e.oriCounts.entries()).sort((a, b) => b[1] - a[1]);
+            let oriLabel = 'Thuận chiều';
+            if (oriEntries.length >= 2) {
+                const lanesA = e.oriLanes.get(oriEntries[0][0])?.size || 0;
+                const lanesB = e.oriLanes.get(oriEntries[1][0])?.size || 0;
+                oriLabel = `Kết hợp (${lanesA} + ${lanesB} làn)`;
+            } else if (oriEntries.length === 1) {
+                const [lMm, wMm] = oriEntries[0][0].split('x').map(Number);
+                oriLabel = (wMm > lMm + 10) ? 'Xoay ngang 90°' : 'Thuận chiều';
+            }
+
+            const baseL = Math.max(e.sampleL, e.sampleW);
+            const baseW = Math.min(e.sampleL, e.sampleW);
+            list.push({
+                name: e.name,
+                color: e.color,
+                stop: e.stop,
+                qty: e.qty,
+                weightTotal: e.weightTotal,
+                cbmTotal: e.cbmTotal,
+                minX: isFinite(e.minX) ? e.minX : 0,
+                maxX: isFinite(e.maxX) ? e.maxX : 0,
+                firstStep: e.firstStep,
+                lastStep: e.lastStep,
+                lanes: e.zBuckets.size,
+                layers: e.yBuckets.size,
+                oriLabel: oriLabel,
+                dimLcm: parseFloat((baseL * 100).toFixed(2)),
+                dimWcm: parseFloat((baseW * 100).toFixed(2)),
+                dimHcm: parseFloat((e.sampleH * 100).toFixed(2))
+            });
+        });
+
+        list.sort((a, b) => a.firstStep - b.firstStep);
+        return list;
+    }
+
+    // Capture 3 crisp 3D views (Isometric, Top, Side) + SKU manifest for every active container
+    captureAllContainersReportData() {
+        if (!this.multiContainerData || this.multiContainerData.length === 0) return [];
+        const prevIdx = this.activeContainerIdx || 0;
+        const prevCamPos = this.camera ? this.camera.position.clone() : null;
+        const prevTarget = this.controls ? this.controls.target.clone() : null;
+        const prevHeightCut = this.heightCut;
+        const canCaptureImg = !!(this.canvas && this.renderer && typeof this.canvas.toDataURL === 'function');
+
+        const reportContainers = [];
+        for (let idx = 0; idx < this.multiContainerData.length; idx++) {
+            const cont = this.multiContainerData[idx];
+            const snapshots = { isometric: '', top: '', side: '' };
+
+            if (canCaptureImg) {
+                this.showContainer(idx);
+                if (this.heightCut < 0.999) {
+                    this.setHeightCut(1.0);
+                }
+                this.setCameraImmediate('isometric');
+                snapshots.isometric = this.canvas.toDataURL('image/jpeg', 0.92);
+                this.setCameraImmediate('top');
+                snapshots.top = this.canvas.toDataURL('image/jpeg', 0.92);
+                this.setCameraImmediate('side');
+                snapshots.side = this.canvas.toDataURL('image/jpeg', 0.92);
+            }
+
+            reportContainers.push({
+                index: idx,
+                type: cont.type,
+                name: cont.name,
+                stats: cont.stats,
+                skuManifest: this.getContainerSkuSummary(idx),
+                snapshots: snapshots
+            });
+        }
+
+        // Restore previous interactive view state seamlessly
+        if (canCaptureImg) {
+            this.showContainer(prevIdx);
+            if (prevHeightCut !== undefined && prevHeightCut < 0.999) {
+                this.setHeightCut(prevHeightCut);
+            }
+            if (prevCamPos && this.camera) this.camera.position.copy(prevCamPos);
+            if (prevTarget && this.controls) {
+                this.controls.target.copy(prevTarget);
+                this.controls.update();
+            }
+            if (this.renderer && this.scene && this.camera) {
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        return reportContainers;
     }
 
     animateCamera(targetPos, targetLook) {
