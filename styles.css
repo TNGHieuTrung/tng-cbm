@@ -581,10 +581,25 @@ img { max-width: 100%; }
 }
 .tabs-scroll-wrap {
     display: flex; align-items: center; gap: 8px; flex-grow: 1;
-    overflow-x: auto; padding: 4px 0; scrollbar-width: thin;
+    overflow-x: auto; padding: 4px 0 10px 0;
+    scrollbar-width: auto;
+    scrollbar-color: #38bdf8 rgba(148, 163, 184, 0.28);
 }
-.tabs-scroll-wrap::-webkit-scrollbar { height: 4px; }
-.tabs-scroll-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+.tabs-scroll-wrap::-webkit-scrollbar {
+    height: 8px;
+}
+.tabs-scroll-wrap::-webkit-scrollbar-track {
+    background: rgba(148, 163, 184, 0.22);
+    border-radius: 999px;
+}
+.tabs-scroll-wrap::-webkit-scrollbar-thumb {
+    background: linear-gradient(90deg, #38bdf8, #2dd4bf);
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+}
+.tabs-scroll-wrap::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(90deg, #7dd3fc, #5eead4);
+}
 
 .cont-tab-btn {
     display: flex; align-items: center; gap: 8px;
@@ -864,6 +879,24 @@ img { max-width: 100%; }
 }
 .cargo-table-responsive {
     overflow-x: auto;
+    padding-bottom: 6px;
+    scrollbar-width: auto;
+    scrollbar-color: #38bdf8 rgba(148, 163, 184, 0.28);
+}
+.cargo-table-responsive::-webkit-scrollbar {
+    height: 8px;
+}
+.cargo-table-responsive::-webkit-scrollbar-track {
+    background: rgba(148, 163, 184, 0.22);
+    border-radius: 999px;
+}
+.cargo-table-responsive::-webkit-scrollbar-thumb {
+    background: linear-gradient(90deg, #38bdf8, #2dd4bf);
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+}
+.cargo-table-responsive::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(90deg, #7dd3fc, #5eead4);
 }
 .cargo-data-table {
     width: 100%;
