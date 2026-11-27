@@ -1152,6 +1152,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (simEquipmentLabel) simEquipmentLabel.textContent = `${data.label} (Cont ${idx + 1})`;
                     const hudContainerTitle = document.getElementById('hudContainerTitle');
                     if (hudContainerTitle) hudContainerTitle.textContent = `Container ${idx + 1} (${data.label.split(' ')[0]})`;
+                    const resultHeader = document.getElementById('resultContainerHeader');
+                    if (resultHeader) resultHeader.textContent = `Container ${idx + 1} (${data.label}) - Kết quả tải trọng & xếp dỡ`;
                     if (stats) updateUIWithSimulationResult(stats);
                 }
             });
@@ -1352,7 +1354,44 @@ document.addEventListener('DOMContentLoaded', () => {
     function openSummaryManifestModal() {
         if (!summaryModal) return;
         const cargoItems = getCargoData();
-        const data = equipmentData[selectedEquipment] || equipmentData['20dc'];
+        const fleet = (activeContainers && activeContainers.length > 0) ? activeContainers : [selectedEquipment || '20dc'];
+        const firstData = equipmentData[fleet[0]] || equipmentData['40hc'];
+
+        // Aggregate actual placed counts per SKU across all containers in simulation
+        const placedBySku = new Map();
+        let totalFleetPlaced = 0;
+        let fleetCapacityVol = 0;
+        let fleetMaxPayload = 0;
+        let cogSummaryText = 'Cân đối (Tâm cont)';
+
+        fleet.forEach(eqKey => {
+            const d = equipmentData[eqKey] || equipmentData['40hc'];
+            fleetCapacityVol += (d.maxVol || 76.3);
+            const numPayload = parseInt(String(d.payload || '26460').replace(/[^\d]/g, '')) || 26460;
+            fleetMaxPayload += numPayload;
+        });
+
+        if (simulation && Array.isArray(simulation.multiContainerData) && simulation.multiContainerData.length > 0) {
+            simulation.multiContainerData.forEach(c => {
+                (c.boxMeshesData || []).forEach(b => {
+                    placedBySku.set(b.name, (placedBySku.get(b.name) || 0) + 1);
+                    totalFleetPlaced++;
+                });
+            });
+            const activeCont = simulation.multiContainerData[simulation.activeContainerIdx || 0];
+            if (activeCont && activeCont.stats && activeCont.stats.cogStatus) {
+                cogSummaryText = activeCont.stats.cogStatus;
+            }
+        }
+
+        // Format fleet label (e.g., "1×40HC + 1×40DC (2 Cont)" or single container label)
+        let equipLabel = firstData.label;
+        if (fleet.length > 1) {
+            const counts = {};
+            fleet.forEach(t => { counts[t] = (counts[t] || 0) + 1; });
+            const summaryStr = Object.entries(counts).map(([k, v]) => `${v}×${k.toUpperCase()}`).join(' + ');
+            equipLabel = `${summaryStr} (${fleet.length} Container)`;
+        }
 
         let totalVol = 0;
         let totalWt = 0;
@@ -1361,6 +1400,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const tableBody = document.getElementById('modalManifestTableBody');
         if (tableBody) tableBody.innerHTML = '';
 
+        const fmtDim = (n) => parseFloat((parseFloat(n) || 0).toFixed(2));
+        const usedBySku = new Map();
+
         cargoItems.forEach((item, idx) => {
             const w = item.width || 50;
             const l = item.length || 60;
@@ -1368,19 +1410,29 @@ document.addEventListener('DOMContentLoaded', () => {
             const q = item.qty || 1;
             const rawWt = parseFloat(item.weight);
             const wt = isNaN(rawWt) ? 0 : Math.max(0, rawWt);
+            const itemVol = (w * l * h * q) / 1000000;
             const itemWt = wt * q;
 
             totalVol += itemVol;
             totalWt += itemWt;
             totalQty += q;
 
+            // Allocate placed boxes across duplicate SKU names if any
+            const totalSkuPlaced = placedBySku.get(item.name) || 0;
+            const alreadyAllocated = usedBySku.get(item.name) || 0;
+            const rowPlaced = totalFleetPlaced > 0
+                ? Math.min(q, Math.max(0, totalSkuPlaced - alreadyAllocated))
+                : q;
+            usedBySku.set(item.name, alreadyAllocated + rowPlaced);
+
             if (tableBody) {
                 const tr = document.createElement('tr');
+                const statusColor = rowPlaced < q ? 'color:#ef4444;font-weight:700;' : 'color:#10b981;font-weight:700;';
                 tr.innerHTML = `
                     <td>${idx + 1}</td>
                     <td><strong>${item.name}</strong></td>
-                    <td>${l} × ${w} × ${h}</td>
-                    <td>${q} / ${q}</td>
+                    <td>${fmtDim(l)} × ${fmtDim(w)} × ${fmtDim(h)}</td>
+                    <td style="${statusColor}">${rowPlaced.toLocaleString()} / ${q.toLocaleString()}</td>
                     <td>${wt}</td>
                     <td>${itemWt.toLocaleString('en-US', { maximumFractionDigits: 1 })}</td>
                     <td>${itemVol.toFixed(3)}</td>
@@ -1393,25 +1445,32 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalCft = (totalVol * 35.3147).toFixed(1);
         const freightTon = Math.max(totalVol, totalWt / 1000).toFixed(2);
         const airVolWeight = Math.round((totalVol * 1000000) / 6000);
-        const utilPercent = ((totalVol / data.maxVol) * 100).toFixed(1);
+        const utilPercent = fleetCapacityVol > 0 ? ((totalVol / fleetCapacityVol) * 100).toFixed(1) : '0.0';
 
+        const modalJobId = document.getElementById('modalJobId');
         const modalEquip = document.getElementById('modalEquipmentName');
         const modalCreated = document.getElementById('modalCreatedDate');
         const modalCbm = document.getElementById('modalTotalCbm');
         const modalCft = document.getElementById('modalTotalCft');
         const modalGross = document.getElementById('modalTotalWeight');
+        const modalMaxPayload = document.getElementById('modalMaxPayload');
         const modalFt = document.getElementById('modalFreightTon');
         const modalAir = document.getElementById('modalAirVolWeight');
         const modalUtil = document.getElementById('modalUtilPercent');
+        const modalCogEval = document.getElementById('modalCogEval');
 
-        if (modalEquip) modalEquip.textContent = data.label;
+        const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        if (modalJobId) modalJobId.textContent = `TNG-STOW-${dateTag}`;
+        if (modalEquip) modalEquip.textContent = equipLabel;
         if (modalCreated) modalCreated.textContent = new Date().toLocaleDateString('vi-VN');
         if (modalCbm) modalCbm.textContent = `${totalVol.toFixed(3)} m³`;
         if (modalCft) modalCft.textContent = `${totalCft} CFT`;
         if (modalGross) modalGross.textContent = `${totalWt.toLocaleString('en-US', { maximumFractionDigits: 1 })} kg`;
+        if (modalMaxPayload) modalMaxPayload.textContent = `Max: ${fleetMaxPayload.toLocaleString()} kg (${fleet.length} cont)`;
         if (modalFt) modalFt.textContent = `${freightTon} FT`;
         if (modalAir) modalAir.textContent = `${airVolWeight.toLocaleString()} kg`;
         if (modalUtil) modalUtil.textContent = `${utilPercent}%`;
+        if (modalCogEval) modalCogEval.textContent = `Trọng tâm: ${cogSummaryText}`;
 
         summaryModal.style.display = 'flex';
     }
