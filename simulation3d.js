@@ -736,6 +736,150 @@ class ContainerSimulation {
 
             let placedCount = 0;
 
+            // Dedicated Hexagonal-Nested Horizontal Cylinder Solver for Fabric Rolls (Cuộn vải nằm ngang xếp sole)
+            if (shapeType === 'fabric') {
+                const rollL = baseL;
+                const rollD = Math.max(baseW, baseH);
+                const maxLayers = parseInt(item.maxLayers) || 0;
+                const hexDy = rollD * 0.86602540378; // sqrt(3)/2 vertical pitch for staggered honeycomb nesting
+
+                const calcMaxK = (availH) => {
+                    if (floorOnly) return (rollD <= availH + 0.001) ? 1 : 0;
+                    if (rollD > availH + 0.001) return 0;
+                    const geomMax = Math.floor((availH - rollD + 0.002) / hexDy) + 1;
+                    return maxLayers > 0 ? Math.min(geomMax, maxLayers) : geomMax;
+                };
+
+                // Option A: Roll axis along X (lengthwise into container)
+                const canAlongX = (rollL <= CL + 0.001 && rollD <= CW + 0.001) &&
+                    (!doorOpts || !doorOpts.enforce || (rollD <= doorOpts.doorW + 0.001 && rollD <= doorOpts.doorH + 0.001));
+                const nEvenX = Math.floor((CW + 0.002) / rollD);
+                const nOddX = Math.max(0, Math.floor((CW + 0.002 - rollD / 2) / rollD));
+                const maxKX = calcMaxK(CH);
+                let perBayX = 0;
+                for (let k = 0; k < maxKX; k++) perBayX += (k % 2 === 0 ? nEvenX : nOddX);
+                const densX = canAlongX && rollL > 0 ? (perBayX / rollL) : -1;
+
+                // Option B: Roll axis along Z (crosswise across container width)
+                const canAlongZ = (rotMode !== 'locked') && (rollL <= CW + 0.001 && rollD <= CL + 0.001) &&
+                    (!doorOpts || !doorOpts.enforce || (rollL <= doorOpts.doorW + 0.001 && rollD <= doorOpts.doorH + 0.001));
+                const nColsZ = Math.floor((CW + 0.002) / rollL);
+                const maxKZ = calcMaxK(CH);
+                const densZ = canAlongZ && rollD > 0 ? ((nColsZ * maxKZ) / rollD) : -1;
+
+                const useAlongZ = (densZ > densX + 0.05);
+                const rollVol = Math.PI * Math.pow(rollD / 2, 2) * rollL;
+
+                const recordRoll = (rx, ry, rz, rl, rh, rw, isPrimary) => {
+                    const stepNumber = this.placedBoxes.length + 1;
+                    const boxRecord = {
+                        x: rx, y: ry, z: rz, l: rl, h: rh, w: rw,
+                        weight: unitWeight, stackable: stackable
+                    };
+                    this.placedBoxes.push(boxRecord);
+                    this.insertSpatialBox(boxRecord);
+                    boxMeshesData.push({
+                        step: stepNumber,
+                        name: item.name,
+                        x: rx, y: ry, z: rz, l: rl, h: rh, w: rw,
+                        weight: unitWeight,
+                        color: color,
+                        shapeType: 'fabric',
+                        stop: item.stop || 'Stop 1'
+                    });
+                    if (!isPrimary) rotatedCount++;
+                    if (rx + rl > maxX) maxX = rx + rl;
+                    placedCount++;
+                    totalPlaced++;
+                    totalPlacedVolume += rollVol;
+                    totalPlacedWeight += unitWeight;
+                    cogSumX += (rx + rl / 2) * unitWeight;
+                    cogSumY += (ry + rh / 2) * unitWeight;
+                    cogSumZ += (rz + rw / 2) * unitWeight;
+                };
+
+                let curX = Math.round(maxX * 1000) / 1000;
+                if (!useAlongZ && canAlongX) {
+                    while (placedCount < qty && curX + rollL <= CL + 0.001) {
+                        const inDoorZone = (doorOpts && doorOpts.enforce && curX + rollL > CL - doorOpts.headerZone);
+                        const bayMaxH = inDoorZone ? Math.min(CH, doorOpts.doorH) : CH;
+                        const kLimit = calcMaxK(bayMaxH);
+                        for (let k = 0; k < kLimit && placedCount < qty; k++) {
+                            const ry = Math.round(k * hexDy * 1000) / 1000;
+                            const zOffset = (k % 2 === 1) ? (rollD / 2) : 0;
+                            const nCols = (k % 2 === 0) ? nEvenX : nOddX;
+                            for (let c = 0; c < nCols && placedCount < qty; c++) {
+                                if (enforcePayload && totalPlacedWeight + unitWeight > spec.payload * 1.05) {
+                                    hitPayloadLimit = true;
+                                    break;
+                                }
+                                const rz = Math.round((-CW / 2 + zOffset + c * rollD) * 1000) / 1000;
+                                recordRoll(curX, ry, rz, rollL, rollD, rollD, true);
+                            }
+                            if (hitPayloadLimit) break;
+                        }
+                        if (hitPayloadLimit) break;
+                        curX = Math.round((curX + rollL) * 1000) / 1000;
+                    }
+                    // Fill any remaining door-end space (< rollL) crosswise (along Z) if allowed
+                    if (placedCount < qty && canAlongZ && curX + rollD <= CL + 0.001) {
+                        while (placedCount < qty && curX + rollD <= CL + 0.001) {
+                            const inDoorZone = (doorOpts && doorOpts.enforce && curX + rollD > CL - doorOpts.headerZone);
+                            const bayMaxH = inDoorZone ? Math.min(CH, doorOpts.doorH) : CH;
+                            const kLimit = calcMaxK(bayMaxH);
+                            for (let k = 0; k < kLimit && placedCount < qty; k++) {
+                                const ry = Math.round(k * hexDy * 1000) / 1000;
+                                const xShift = (k % 2 === 1) ? (rollD / 2) : 0;
+                                const rx = Math.round((curX + xShift) * 1000) / 1000;
+                                if (rx + rollD > CL + 0.001) continue;
+                                for (let c = 0; c < nColsZ && placedCount < qty; c++) {
+                                    if (enforcePayload && totalPlacedWeight + unitWeight > spec.payload * 1.05) {
+                                        hitPayloadLimit = true;
+                                        break;
+                                    }
+                                    const rz = Math.round((-CW / 2 + c * rollL) * 1000) / 1000;
+                                    recordRoll(rx, ry, rz, rollD, rollD, rollL, false);
+                                }
+                                if (hitPayloadLimit) break;
+                            }
+                            if (hitPayloadLimit) break;
+                            curX = Math.round((curX + rollD) * 1000) / 1000;
+                        }
+                    }
+                } else if (useAlongZ && canAlongZ) {
+                    while (placedCount < qty && curX + rollD <= CL + 0.001) {
+                        const inDoorZone = (doorOpts && doorOpts.enforce && curX + rollD > CL - doorOpts.headerZone);
+                        const bayMaxH = inDoorZone ? Math.min(CH, doorOpts.doorH) : CH;
+                        const kLimit = calcMaxK(bayMaxH);
+                        for (let k = 0; k < kLimit && placedCount < qty; k++) {
+                            const ry = Math.round(k * hexDy * 1000) / 1000;
+                            const xShift = (k % 2 === 1) ? (rollD / 2) : 0;
+                            const rx = Math.round((curX + xShift) * 1000) / 1000;
+                            if (rx + rollD > CL + 0.001) continue;
+                            for (let c = 0; c < nColsZ && placedCount < qty; c++) {
+                                if (enforcePayload && totalPlacedWeight + unitWeight > spec.payload * 1.05) {
+                                    hitPayloadLimit = true;
+                                    break;
+                                }
+                                const rz = Math.round((-CW / 2 + c * rollL) * 1000) / 1000;
+                                recordRoll(rx, ry, rz, rollD, rollD, rollL, false);
+                            }
+                            if (hitPayloadLimit) break;
+                        }
+                        if (hitPayloadLimit) break;
+                        curX = Math.round((curX + rollD) * 1000) / 1000;
+                    }
+                }
+
+                // Seed floor candidate point after fabric rolls for any subsequent SKUs
+                this.addCandidatePoint(candidatePoints, maxX, 0, -CW / 2, CL, CW, CH);
+                const unplaced = qty - placedCount;
+                if (unplaced > 0) {
+                    unplacedItems.push({ ...item, remainingQty: unplaced });
+                }
+                continue;
+            }
+
             const primaryOri = { l: baseL, h: baseH, w: baseW, isPrimary: true };
             const rotOri = { l: baseW, h: baseH, w: baseL, isPrimary: false };
             const extra3DOris = (rotMode === 'all' || rotMode === '3d') ? [
@@ -1248,9 +1392,24 @@ class ContainerSimulation {
 
     placeBox(x, y, z, l, h, w, color, name, s, shapeType = 'box', step = 1, weight = 10) {
         let geo;
-        if (shapeType === 'cylinder') {
-            const radius = Math.min(l, w) / 2 * s - 0.4;
-            geo = new THREE.CylinderGeometry(radius, radius, h * s - 0.5, 24);
+        let rotX = 0;
+        let rotZ = 0;
+        if (shapeType === 'cylinder' || shapeType === 'fabric') {
+            if (Math.abs(w - h) <= 0.015 && l > w + 0.02) {
+                // Horizontal cylinder oriented along container X axis (lengthwise fabric roll)
+                const radius = (Math.min(w, h) / 2) * s - 0.3;
+                geo = new THREE.CylinderGeometry(radius, radius, l * s - 0.5, 24);
+                rotZ = Math.PI / 2;
+            } else if (Math.abs(l - h) <= 0.015 && w > l + 0.02) {
+                // Horizontal cylinder oriented along container Z axis (crosswise fabric roll)
+                const radius = (Math.min(l, h) / 2) * s - 0.3;
+                geo = new THREE.CylinderGeometry(radius, radius, w * s - 0.5, 24);
+                rotX = Math.PI / 2;
+            } else {
+                // Upright cylinder (drums)
+                const radius = Math.min(l, w) / 2 * s - 0.4;
+                geo = new THREE.CylinderGeometry(radius, radius, h * s - 0.5, 24);
+            }
         } else {
             geo = new THREE.BoxGeometry(l * s - 0.6, h * s - 0.6, w * s - 0.6);
         }
@@ -1285,6 +1444,8 @@ class ContainerSimulation {
             (y + h / 2) * s,
             (z + w / 2) * s
         );
+        if (rotX) mesh.rotation.x = rotX;
+        if (rotZ) mesh.rotation.z = rotZ;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         mesh.userData = {
@@ -1304,6 +1465,7 @@ class ContainerSimulation {
         });
         const edgeLines = new THREE.LineSegments(edgesGeo, edgesMat);
         edgeLines.position.copy(mesh.position);
+        edgeLines.rotation.copy(mesh.rotation);
         edgeLines.userData = { step };
         this.cargoGroup.add(edgeLines);
 
@@ -1610,6 +1772,9 @@ class ContainerSimulation {
         } else if (preset === 'side') {
             pos = new THREE.Vector3(L / 2, H * 0.48, Math.max(L * 0.95, 260));
             look = new THREE.Vector3(L / 2, H * 0.45, 0);
+        } else if (preset === 'door') {
+            pos = new THREE.Vector3(L * 1.65, H * 0.55, 0.01);
+            look = new THREE.Vector3(L * 0.55, H * 0.46, 0);
         } else {
             pos = new THREE.Vector3(L * 1.15, H * 1.38, L * 0.72);
             look = new THREE.Vector3(L / 2, H * 0.42, 0);
@@ -1623,6 +1788,27 @@ class ContainerSimulation {
             this.camera.lookAt(look);
         }
         this.renderer.render(this.scene, this.camera);
+    }
+
+    captureDoorSnapshot(contIndex = 0) {
+        if (!this.canvas || !this.renderer || typeof this.canvas.toDataURL !== 'function') return '';
+        if (!this.multiContainerData || !this.multiContainerData[contIndex]) return '';
+        const prevIdx = this.activeContainerIdx || 0;
+        const prevCamPos = this.camera ? this.camera.position.clone() : null;
+        const prevTarget = this.controls ? this.controls.target.clone() : null;
+
+        this.showContainer(contIndex);
+        this.setCameraImmediate('door');
+        const img = this.canvas.toDataURL('image/jpeg', 0.92);
+
+        this.showContainer(prevIdx);
+        if (prevCamPos && this.camera) this.camera.position.copy(prevCamPos);
+        if (prevTarget && this.controls) {
+            this.controls.target.copy(prevTarget);
+            this.controls.update();
+        }
+        this.renderer.render(this.scene, this.camera);
+        return img;
     }
 
     // Build warehouse-ready per-container SKU loading manifest (ordered back-to-front by loading step)
@@ -1650,6 +1836,7 @@ class ContainerSimulation {
                     yBuckets: new Set(),
                     oriCounts: new Map(),
                     oriLanes: new Map(),
+                    shapeType: b.shapeType || 'box',
                     sampleL: b.l,
                     sampleW: b.w,
                     sampleH: b.h
@@ -1658,7 +1845,10 @@ class ContainerSimulation {
             }
             entry.qty++;
             entry.weightTotal += (parseFloat(b.weight) || 0);
-            entry.cbmTotal += (b.l * b.w * b.h);
+            const unitVol = (b.shapeType === 'fabric')
+                ? (Math.PI * Math.pow(Math.min(b.w, b.h, b.l) / 2, 2) * Math.max(b.l, b.w))
+                : (b.l * b.w * b.h);
+            entry.cbmTotal += unitVol;
             if (b.x < entry.minX) entry.minX = b.x;
             if (b.x + b.l > entry.maxX) entry.maxX = b.x + b.l;
             if (b.step < entry.firstStep) entry.firstStep = b.step;
@@ -1684,7 +1874,11 @@ class ContainerSimulation {
                 oriLabel = `Kết hợp (${lanesA} + ${lanesB} làn)`;
             } else if (oriEntries.length === 1) {
                 const [lMm, wMm] = oriEntries[0][0].split('x').map(Number);
-                oriLabel = (wMm > lMm + 10) ? 'Xoay ngang 90°' : 'Thuận chiều';
+                if (e.shapeType === 'fabric') {
+                    oriLabel = (wMm > lMm + 10) ? 'Cuộn ngang (Sole)' : 'Cuộn dọc (Sole)';
+                } else {
+                    oriLabel = (wMm > lMm + 10) ? 'Xoay ngang 90°' : 'Thuận chiều';
+                }
             }
 
             const baseL = Math.max(e.sampleL, e.sampleW);

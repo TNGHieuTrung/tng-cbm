@@ -427,8 +427,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const rawWt = parseFloat(weightInput?.value);
             const weight = isNaN(rawWt) ? 0 : Math.max(0, rawWt);
 
+            const typeVal = card.querySelector('input[type="radio"]:checked')?.value || 'box';
             const totalWt = (weight * qty).toLocaleString('en-US', { maximumFractionDigits: 1 });
-            const totalVol = ((w * l * h * qty) / 1000000).toFixed(3);
+            const rawVol = (typeVal === 'fabric')
+                ? (Math.PI * Math.pow(Math.max(w, h) / 2, 2) * l * qty) / 1000000
+                : (w * l * h * qty) / 1000000;
+            const totalVol = rawVol.toFixed(3);
 
             if (totalWeightSpan) totalWeightSpan.textContent = totalWt;
             if (totalVolSpan) totalVolSpan.textContent = totalVol;
@@ -440,8 +444,32 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         [widthInput, lengthInput, heightInput, qtyInput, weightInput].forEach(inp => {
-            if (inp) inp.addEventListener('input', () => calcCard(true));
+            if (inp) inp.addEventListener('input', () => {
+                const isFabric = card.querySelector('input[type="radio"]:checked')?.value === 'fabric';
+                if (isFabric && inp === widthInput && heightInput) {
+                    heightInput.value = widthInput.value;
+                }
+                calcCard(true);
+            });
         });
+
+        const syncCardTypeLabels = (typeVal) => {
+            const u = UNIT_SHORT[currentDimUnit] || 'cm';
+            const wLbl = card.querySelector('.cargo-width')?.closest('.dim-input')?.querySelector('label');
+            const lLbl = card.querySelector('.cargo-length')?.closest('.dim-input')?.querySelector('label');
+            const hLbl = card.querySelector('.cargo-height')?.closest('.dim-input')?.querySelector('label');
+            if (typeVal === 'fabric') {
+                if (lLbl) lLbl.textContent = `Khổ vải L (${u})`;
+                if (wLbl) wLbl.textContent = `Đường kính Ø (${u})`;
+                if (hLbl) hLbl.textContent = `Đường kính (${u})`;
+                if (widthInput && heightInput) heightInput.value = widthInput.value;
+            } else {
+                const isEn = document.documentElement.lang === 'en';
+                if (wLbl) wLbl.textContent = isEn ? `Width (${u})` : `Rộng (${u})`;
+                if (lLbl) lLbl.textContent = isEn ? `Length (${u})` : `Dài (${u})`;
+                if (hLbl) hLbl.textContent = isEn ? `Height (${u})` : `Cao (${u})`;
+            }
+        };
 
         // Pill switches for type & stackable
         const radioPills = card.querySelectorAll('.radio-pill');
@@ -452,7 +480,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const radio = pill.querySelector('input');
                 if (radio) {
                     radio.checked = true;
-                    evaluateBestFitAndSync();
+                    syncCardTypeLabels(radio.value);
+                    calcCard(true);
                 }
             });
         });
@@ -1733,10 +1762,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 const posSel = card.querySelector('.cargo-position');
                 if (posSel) posSel.value = r.position || 'normal';
 
+                const targetType = r.type || 'box';
+                card.querySelectorAll('.radio-pill').forEach(p => {
+                    const inp = p.querySelector('input');
+                    const matched = inp && inp.value === targetType;
+                    if (inp) inp.checked = !!matched;
+                    p.classList.toggle('active', !!matched);
+                });
+                if (targetType === 'fabric') {
+                    const u = UNIT_SHORT[currentDimUnit] || 'cm';
+                    const wLbl = card.querySelector('.cargo-width')?.closest('.dim-input')?.querySelector('label');
+                    const lLbl = card.querySelector('.cargo-length')?.closest('.dim-input')?.querySelector('label');
+                    const hLbl = card.querySelector('.cargo-height')?.closest('.dim-input')?.querySelector('label');
+                    if (lLbl) lLbl.textContent = `Khổ vải L (${u})`;
+                    if (wLbl) wLbl.textContent = `Đường kính Ø (${u})`;
+                    if (hLbl) hLbl.textContent = `Đường kính (${u})`;
+                }
+
                 const cWtSpan = card.querySelector('[id^="totalWeight"]');
                 const cVolSpan = card.querySelector('[id^="totalVol"]');
                 if (cWtSpan) cWtSpan.textContent = ((r.weight || 0) * r.qty).toLocaleString('en-US', { maximumFractionDigits: 1 });
-                if (cVolSpan) cVolSpan.textContent = ((r.wCm * r.lCm * r.hCm * r.qty) / 1000000).toFixed(3);
+                const cardVol = (targetType === 'fabric')
+                    ? (Math.PI * Math.pow(Math.max(r.wCm, r.hCm) / 2, 2) * r.lCm * r.qty) / 1000000
+                    : (r.wCm * r.lCm * r.hCm * r.qty) / 1000000;
+                if (cVolSpan) cVolSpan.textContent = cardVol.toFixed(3);
             }
         });
 
@@ -1992,6 +2041,257 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.print();
                 setTimeout(cleanup, 1000);
             }, 60);
+        });
+    }
+
+    // ===== 8D. Supplier Loading Audit (Import Fabric Rolls & Verification) =====
+    const btnOpenSupplierAuditTop = document.getElementById('btnOpenSupplierAuditTop');
+    const supplierAuditSection = document.getElementById('supplierAuditSection');
+    const btnLoadFabricSample = document.getElementById('btnLoadFabricSample');
+    const btnRunSupplierAudit = document.getElementById('btnRunSupplierAudit');
+    const btnExportAuditPdf = document.getElementById('btnExportAuditPdf');
+    const btnUploadSupplierPhoto = document.getElementById('btnUploadSupplierPhoto');
+    const supplierPhotoInput = document.getElementById('supplierPhotoInput');
+    const supplierPhotoPreview = document.getElementById('supplierPhotoPreview');
+    const supplierPhotoWrap = document.getElementById('supplierPhotoWrap');
+    const audit3dDoorPreview = document.getElementById('audit3dDoorPreview');
+    const audit3dDoorPlaceholder = document.getElementById('audit3dDoorPlaceholder');
+    const auditVerdictBox = document.getElementById('auditVerdictBox');
+    const auditVerdictPill = document.getElementById('auditVerdictPill');
+    const auditVerdictMsg = document.getElementById('auditVerdictMsg');
+
+    let lastAuditReport = null;
+    let uploadedSupplierPhotoUrl = '';
+
+    if (btnOpenSupplierAuditTop && supplierAuditSection) {
+        btnOpenSupplierAuditTop.addEventListener('click', () => {
+            supplierAuditSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }
+
+    if (btnLoadFabricSample) {
+        btnLoadFabricSample.addEventListener('click', () => {
+            const fabricSampleRows = [
+                { name: 'Vải Kaki 160cm (Ø32)', lCm: 160, wCm: 32, hCm: 32, qty: 180, weight: 28, color: '#0284c7', type: 'fabric', stop: 'Stop 1' },
+                { name: 'Vải Denim 150cm (Ø34)', lCm: 150, wCm: 34, hCm: 34, qty: 110, weight: 32, color: '#4f46e5', type: 'fabric', stop: 'Stop 1' },
+                { name: 'Vải Thun Cotton 175cm (Ø28)', lCm: 175, wCm: 28, hCm: 28, qty: 95, weight: 22, color: '#0d9488', type: 'fabric', stop: 'Stop 1' }
+            ];
+            if (enforcePayloadToggle) enforcePayloadToggle.checked = true;
+            if (autoFitToggle) autoFitToggle.checked = false;
+            selectEquipment('40hc', false);
+            applyCargoItemsToCards(fabricSampleRows, 'replace');
+            activeContainers = ['40hc'];
+
+            const supQtyInp = document.getElementById('auditSupplierQty');
+            const supTypeSel = document.getElementById('auditContType');
+            const supCntInp = document.getElementById('auditContCount');
+            const supNoteInp = document.getElementById('auditSupplierNote');
+            if (supTypeSel) supTypeSel.value = '40hc';
+            if (supCntInp) supCntInp.value = 1;
+            if (supQtyInp) supQtyInp.value = 310;
+            if (supNoteInp) supNoteInp.value = 'NCC báo cont 40HC chỉ xếp được 310 cây, dư 75 cây yêu cầu tách lô / đi LCL';
+
+            showToast('Đã nạp mẫu 3 mã Cuộn vải (385 cây) — sẵn sàng đối chiếu tải hàng NCC!');
+            setTimeout(() => {
+                if (btnRunSupplierAudit) btnRunSupplierAudit.click();
+            }, 350);
+        });
+    }
+
+    if (btnUploadSupplierPhoto && supplierPhotoInput) {
+        btnUploadSupplierPhoto.addEventListener('click', () => supplierPhotoInput.click());
+        supplierPhotoInput.addEventListener('change', (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                uploadedSupplierPhotoUrl = ev.target.result;
+                if (supplierPhotoPreview) {
+                    supplierPhotoPreview.src = uploadedSupplierPhotoUrl;
+                    supplierPhotoPreview.style.display = 'block';
+                }
+                const ph = supplierPhotoWrap?.querySelector('.compare-placeholder');
+                if (ph) ph.style.display = 'none';
+                showToast('Đã tải ảnh chụp thực tế của NCC để đối chiếu!');
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function runSupplierAudit() {
+        if (!simulation) return;
+        const cargoItems = getCargoData();
+        if (!cargoItems || cargoItems.length === 0) {
+            showToast('Vui lòng nhập hoặc bật ít nhất 1 mã hàng trước khi kiểm tra!', true);
+            return;
+        }
+
+        const supName = (document.getElementById('auditSupplierName')?.value || 'Nhà cung cấp Vải').trim();
+        const contType = document.getElementById('auditContType')?.value || '40hc';
+        const contCount = Math.max(1, parseInt(document.getElementById('auditContCount')?.value) || 1);
+        const supQty = Math.max(1, parseInt(document.getElementById('auditSupplierQty')?.value) || 1);
+        const supNote = (document.getElementById('auditSupplierNote')?.value || '').trim();
+        const auditPayload = document.getElementById('auditEnforcePayload')?.checked !== false;
+        const selectedAlgo = document.querySelector('input[name="algorithm"]:checked')?.value || 'best-balance';
+
+        const auditFleet = Array(contCount).fill(contType);
+
+        // 1. Physical Max (0% margin)
+        const maxRes = simulation.packMultiContainers(cargoItems, selectedAlgo, auditFleet, {
+            marginL: 0, marginW: 0, marginH: 0,
+            enforceDoorClearance: isDoorClearanceEnforced(),
+            enforcePayload: auditPayload
+        });
+        const maxCap = maxRes.totalPlaced;
+
+        // 2. Practical Benchmark (2% L/W shrink margin + door + payload) — leaves this as the displayed 3D simulation
+        const practRes = simulation.packMultiContainers(cargoItems, selectedAlgo, auditFleet, {
+            marginL: 2, marginW: 2, marginH: 0,
+            enforceDoorClearance: isDoorClearanceEnforced(),
+            enforcePayload: auditPayload
+        });
+        const practicalCap = practRes.totalPlaced;
+
+        // Sync main simulator UI to show the audited fleet
+        activeContainers = auditFleet.slice();
+        selectedEquipment = contType;
+        renderContainerTabs(practRes);
+        updateUIWithSimulationResult(practRes.activeContainerStats || practRes);
+
+        // Capture live 3D Door View snapshot
+        const doorImg = simulation.captureDoorSnapshot(0);
+        if (doorImg && audit3dDoorPreview) {
+            audit3dDoorPreview.src = doorImg;
+            audit3dDoorPreview.style.display = 'block';
+            if (audit3dDoorPlaceholder) audit3dDoorPlaceholder.style.display = 'none';
+        }
+
+        // Compute Verdict
+        let status = 'ok';
+        let pillText = '🟢 HỢP LÝ / ĐẠT CHUẨN';
+        let msg = '';
+        const diffPract = practicalCap - supQty;
+        const ratioPct = practicalCap > 0 ? ((supQty / practicalCap) * 100).toFixed(1) : '100.0';
+
+        if (supQty > maxCap) {
+            status = 'danger';
+            pillText = '🔴 BẤT THƯỜNG — NGHI VẤN KHAI KHỐNG';
+            msg = `NCC báo đã đóng ${supQty.toLocaleString()} cây/kiện vào ${contCount}×${contType.toUpperCase()}, nhưng giới hạn vật lý tối đa (0% sai số${auditPayload ? ' & tải trọng' : ''}) chỉ chứa được ${maxCap.toLocaleString()} cây/kiện. Cần kiểm tra lại đường kính cuộn vải hoặc Packing List ngay!`;
+        } else if (supQty < Math.floor(practicalCap * 0.94)) {
+            status = 'warn';
+            pillText = '🟡 XẾP CHƯA TỐI ƯU — LÃNG PHÍ CHỖ';
+            msg = `AI TNG chứng minh ${contCount}×${contType.toUpperCase()} xếp thực tế (đã trừ 2% sai số) được ${practicalCap.toLocaleString()} cây/kiện — nhiều hơn NCC báo ${diffPract.toLocaleString()} cây/kiện (NCC mới đạt ${ratioPct}%). Có thể gửi sơ đồ 3D yêu cầu NCC xếp lại!`;
+        } else {
+            status = 'ok';
+            pillText = '🟢 HỢP LÝ / ĐẠT CHUẨN';
+            msg = `Số lượng NCC xếp (${supQty.toLocaleString()} cây/kiện) đạt ${ratioPct}% so với chuẩn tối ưu thực tế TNG (${practicalCap.toLocaleString()} cây/kiện; trần tối đa ${maxCap.toLocaleString()}).`;
+        }
+
+        if (auditVerdictBox) auditVerdictBox.style.display = 'block';
+        if (auditVerdictPill) {
+            auditVerdictPill.textContent = pillText;
+            auditVerdictPill.className = `verdict-pill verdict-${status}`;
+        }
+        if (auditVerdictMsg) auditVerdictMsg.textContent = msg;
+
+        const elSup = document.getElementById('vKpiSupplier');
+        const elPra = document.getElementById('vKpiPractical');
+        const elMax = document.getElementById('vKpiMax');
+        const elDif = document.getElementById('vKpiDiff');
+        if (elSup) elSup.textContent = `${supQty.toLocaleString()} cây/kiện`;
+        if (elPra) elPra.textContent = `${practicalCap.toLocaleString()} cây/kiện`;
+        if (elMax) elMax.textContent = `${maxCap.toLocaleString()} cây/kiện`;
+        if (elDif) {
+            elDif.textContent = diffPract >= 0 ? `+${diffPract.toLocaleString()} (TNG xếp thêm)` : `${diffPract.toLocaleString()} (Vượt trần)`;
+            elDif.style.color = diffPract > 0 ? '#d97706' : (diffPract < 0 ? '#dc2626' : '#059669');
+        }
+
+        lastAuditReport = {
+            supName, contType, contCount, supQty, supNote, auditPayload,
+            practicalCap, maxCap, diffPract, ratioPct, status, pillText, msg,
+            doorImg,
+            reportContainers: simulation.captureAllContainersReportData()
+        };
+    }
+
+    if (btnRunSupplierAudit) {
+        btnRunSupplierAudit.addEventListener('click', runSupplierAudit);
+    }
+
+    if (btnExportAuditPdf) {
+        btnExportAuditPdf.addEventListener('click', () => {
+            if (!lastAuditReport) runSupplierAudit();
+            if (!lastAuditReport || !loadingPlanModal || !loadingPlanPrintSheet) return;
+
+            const r = lastAuditReport;
+            const todayStr = new Date().toLocaleDateString('vi-VN');
+            const c0 = r.reportContainers[0] || {};
+            const skuRows = (c0.skuManifest || []).map((sku, i) => `
+                <tr>
+                    <td style="text-align:center;">${i + 1}</td>
+                    <td><span class="plan-color-dot" style="background:${sku.color};"></span><strong>${sku.name}</strong></td>
+                    <td>${sku.dimLcm} × Ø${sku.dimWcm} cm</td>
+                    <td style="text-align:right;font-weight:700;">${sku.qty.toLocaleString()}</td>
+                    <td><strong>${sku.lanes} làn × ${sku.layers} tầng</strong></td>
+                    <td>${sku.oriLabel}</td>
+                    <td style="text-align:right;">${sku.cbmTotal.toFixed(3)}</td>
+                </tr>
+            `).join('');
+
+            const photoBlock = uploadedSupplierPhotoUrl
+                ? `<div class="plan-view-card"><div class="plan-view-label">SUPPLIER ACTUAL PHOTO / ẢNH THỰC TẾ NCC</div><img src="${uploadedSupplierPhotoUrl}" alt="Supplier Photo"></div>`
+                : `<div class="plan-view-card"><div class="plan-view-label">SIDE VIEW / NHÌN BÊN HÔNG 3D</div><img src="${c0.snapshots?.side || ''}" alt="3D Side View"></div>`;
+
+            loadingPlanPrintSheet.innerHTML = `
+                <div class="plan-container-page">
+                    <div class="plan-page-header">
+                        <div>
+                            <div class="plan-brand-title">TNG LOGISTICS • SUPPLIER CONTAINER LOADING AUDIT REPORT (VI / EN)</div>
+                            <div class="plan-brand-sub">BÁO CÁO ĐỐI CHIẾU TẢI HÀNG NHÀ CUNG CẤP &nbsp;|&nbsp; Supplier: <strong>${r.supName}</strong> &nbsp;|&nbsp; Date: <strong>${todayStr}</strong></div>
+                            <div class="plan-brand-sub">Equipment: <strong>${r.contCount}×${r.contType.toUpperCase()}</strong> &nbsp;|&nbsp; Note: ${r.supNote || 'N/A'}</div>
+                        </div>
+                        <div class="plan-cont-badge-box">
+                            <span class="plan-cont-pill">${r.pillText}</span>
+                            <div class="plan-meta-sub">TNG Practical Benchmark (2% margin)</div>
+                        </div>
+                    </div>
+
+                    <div class="audit-pdf-verdict-banner">${r.msg}</div>
+
+                    <div class="plan-kpi-strip" style="grid-template-columns: repeat(4, 1fr);">
+                        <div class="plan-kpi-card"><span>Supplier Claim / NCC báo</span><strong>${r.supQty.toLocaleString()} pcs</strong></div>
+                        <div class="plan-kpi-card"><span>TNG Practical / Chuẩn 2%</span><strong style="color:#0d9488;">${r.practicalCap.toLocaleString()} pcs</strong></div>
+                        <div class="plan-kpi-card"><span>Physical Max / Trần 0%</span><strong>${r.maxCap.toLocaleString()} pcs</strong></div>
+                        <div class="plan-kpi-card"><span>Difference / Chênh lệch</span><strong>${r.diffPract >= 0 ? '+' + r.diffPract : r.diffPract} pcs (${r.ratioPct}%)</strong></div>
+                    </div>
+
+                    <div class="plan-views-grid">
+                        ${photoBlock}
+                        <div class="plan-view-card"><div class="plan-view-label">TNG 3D DOOR VIEW / CỬA CONT 3D</div><img src="${r.doorImg || c0.snapshots?.isometric || ''}" alt="3D Door"></div>
+                        <div class="plan-view-card"><div class="plan-view-label">TNG 3D TOP VIEW / SƠ ĐỒ LÀN XẾP</div><img src="${c0.snapshots?.top || ''}" alt="3D Top"></div>
+                    </div>
+
+                    <div class="plan-section-heading">
+                        <span>RECOMMENDED LOADING PATTERN / HƯỚNG DẪN XẾP CHUẨN TNG (HEXAGONAL NESTING)</span>
+                        <span>${(c0.skuManifest || []).length} SKUs</span>
+                    </div>
+                    <table class="plan-sku-table">
+                        <thead>
+                            <tr>
+                                <th style="width:34px;text-align:center;">#</th>
+                                <th>Item / Mã hàng</th>
+                                <th>Dims / Kích thước</th>
+                                <th style="text-align:right;">Qty / SL</th>
+                                <th>Pattern / Bố trí</th>
+                                <th>Orientation / Hướng</th>
+                                <th style="text-align:right;">CBM (m³)</th>
+                            </tr>
+                        </thead>
+                        <tbody>${skuRows}</tbody>
+                    </table>
+                </div>
+            `;
+            loadingPlanModal.style.display = 'flex';
         });
     }
 
