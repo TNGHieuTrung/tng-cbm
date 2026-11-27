@@ -736,167 +736,222 @@ class ContainerSimulation {
 
             let placedCount = 0;
 
-            // Dedicated Hexagonal-Nested Horizontal Cylinder Solver for Fabric Rolls (Cuộn vải nằm ngang xếp sole)
-            if (shapeType === 'fabric') {
-                const fabricMode = options.fabricMode || 'auto'; // 'auto' | 'alongX' | 'alongZ' | 'squareX' | 'squareZ'
-                const isStaggered = !(fabricMode === 'squareX' || fabricMode === 'squareZ');
-                const rollL = baseL;
-                const rollD = Math.max(baseW, baseH);
-                const maxLayers = parseInt(item.maxLayers) || 0;
-                const hexDy = isStaggered ? (rollD * 0.86602540378) : rollD; // sqrt(3)/2 vertical pitch for staggered honeycomb nesting
+// Dedicated Hexagonal-Nested Horizontal Cylinder Solver for Fabric Rolls (Cuộn vải nằm ngang xếp sole)
+// When fabricMode === "auto" (default), pools all fabric SKUs together for pure volume optimization
+// (no strict SKU-order separation; allows shorter/smaller rolls to fill partial bays & door pockets).
+if (shapeType === "fabric") {
+    const fabricMode = options.fabricMode || "auto";
+    const isStaggered = !(fabricMode === "squareX" || fabricMode === "squareZ");
+    const allowCrossSkuMix = (fabricMode === "auto" && options.mixFabricSkus !== false);
 
-                const calcMaxK = (availH) => {
-                    if (floorOnly) return (rollD <= availH + 0.001) ? 1 : 0;
-                    if (rollD > availH + 0.001) return 0;
-                    const geomMax = Math.floor((availH - rollD + 0.002) / hexDy) + 1;
-                    return maxLayers > 0 ? Math.min(geomMax, maxLayers) : geomMax;
-                };
+    const pool = [];
+    let endItemIdx = itemIdx;
+    for (let fIdx = itemIdx; fIdx < cargoItems.length; fIdx++) {
+        const fIt = cargoItems[fIdx];
+        if ((fIt.type || "box") !== "fabric") break;
+        const fQty = parseInt(fIt.remainingQty !== undefined ? fIt.remainingQty : fIt.qty) || 0;
+        if (fQty <= 0) { endItemIdx = fIdx; continue; }
+        const fW = (parseFloat(fIt.width) || 32) / 100;
+        const fL = (parseFloat(fIt.length) || 160) / 100;
+        const fH = (parseFloat(fIt.height) || 32) / 100;
+        const fD = Math.max(fW, fH);
+        const fWt = isNaN(parseFloat(fIt.weight)) ? 0 : Math.max(0, parseFloat(fIt.weight));
+        const fRot = (algorithm === "garment" && (!fIt.rotation || fIt.rotation === "horizontal" || fIt.rotation === "fit"))
+            ? "garment" : (fIt.rotation || "fit");
+        pool.push({
+            origItem: fIt,
+            name: fIt.name,
+            color: fIt.color || "#0284c7",
+            stop: fIt.stop || "Stop 1",
+            rollL: fL,
+            rollD: fD,
+            hexDy: isStaggered ? (fD * 0.86602540378) : fD,
+            unitWeight: fWt,
+            stackable: fIt.stackable !== false,
+            floorOnly: fIt.floorOnly === true,
+            maxLayers: parseInt(fIt.maxLayers) || 0,
+            rotMode: fRot,
+            rollVol: Math.PI * Math.pow(fD / 2, 2) * fL,
+            rem: fQty
+        });
+        endItemIdx = fIdx;
+        if (!allowCrossSkuMix) break;
+    }
 
-                // Option A: Roll axis along X (lengthwise into container)
-                const canAlongX = (rollL <= CL + 0.001 && rollD <= CW + 0.001) &&
-                    (!doorOpts || !doorOpts.enforce || (rollD <= doorOpts.doorW + 0.001 && rollD <= doorOpts.doorH + 0.001));
-                const nEvenX = Math.floor((CW + 0.002) / rollD);
-                const nOddX = isStaggered ? Math.max(0, Math.floor((CW + 0.002 - rollD / 2) / rollD)) : nEvenX;
-                const maxKX = calcMaxK(CH);
-                let perBayX = 0;
-                for (let k = 0; k < maxKX; k++) perBayX += (k % 2 === 0 ? nEvenX : nOddX);
-                const densX = canAlongX && rollL > 0 ? (perBayX / rollL) : -1;
+    const calcMaxKFor = (p, availH) => {
+        if (p.floorOnly) return (p.rollD <= availH + 0.001) ? 1 : 0;
+        if (p.rollD > availH + 0.001) return 0;
+        const geomMax = Math.floor((availH - p.rollD + 0.002) / p.hexDy) + 1;
+        return p.maxLayers > 0 ? Math.min(geomMax, p.maxLayers) : geomMax;
+    };
 
-                // Option B: Roll axis along Z (crosswise across container width)
-                const canAlongZ = (rotMode !== 'locked') && (rollL <= CW + 0.001 && rollD <= CL + 0.001) &&
-                    (!doorOpts || !doorOpts.enforce || (rollL <= doorOpts.doorW + 0.001 && rollD <= doorOpts.doorH + 0.001));
-                const nColsZ = Math.floor((CW + 0.002) / rollL);
-                const maxKZ = calcMaxK(CH);
-                const densZ = canAlongZ && rollD > 0 ? ((nColsZ * maxKZ) / rollD) : -1;
+    const recordPoolRoll = (p, rx, ry, rz, rl, rh, rw, isPrimary) => {
+        const stepNumber = this.placedBoxes.length + 1;
+        const boxRecord = {
+            x: rx, y: ry, z: rz, l: rl, h: rh, w: rw,
+            weight: p.unitWeight, stackable: p.stackable
+        };
+        this.placedBoxes.push(boxRecord);
+        this.insertSpatialBox(boxRecord);
+        boxMeshesData.push({
+            step: stepNumber,
+            name: p.name,
+            x: rx, y: ry, z: rz, l: rl, h: rh, w: rw,
+            weight: p.unitWeight,
+            color: p.color,
+            shapeType: "fabric",
+            stop: p.stop
+        });
+        if (!isPrimary) rotatedCount++;
+        if (rx + rl > maxX) maxX = rx + rl;
+        p.rem--;
+        totalPlaced++;
+        totalPlacedVolume += p.rollVol;
+        totalPlacedWeight += p.unitWeight;
+        cogSumX += (rx + rl / 2) * p.unitWeight;
+        cogSumY += (ry + rh / 2) * p.unitWeight;
+        cogSumZ += (rz + rw / 2) * p.unitWeight;
+    };
 
-                let useAlongZ = (densZ > densX + 0.05);
-                if (fabricMode === 'alongX' || fabricMode === 'squareX') useAlongZ = false;
-                if (fabricMode === 'alongZ' || fabricMode === 'squareZ') useAlongZ = true;
-                const allowDoorCrossFill = (fabricMode === 'auto');
-                const rollVol = Math.PI * Math.pow(rollD / 2, 2) * rollL;
+    let curX = Math.round(maxX * 1000) / 1000;
 
-                const recordRoll = (rx, ry, rz, rl, rh, rw, isPrimary) => {
-                    const stepNumber = this.placedBoxes.length + 1;
-                    const boxRecord = {
-                        x: rx, y: ry, z: rz, l: rl, h: rh, w: rw,
-                        weight: unitWeight, stackable: stackable
-                    };
-                    this.placedBoxes.push(boxRecord);
-                    this.insertSpatialBox(boxRecord);
-                    boxMeshesData.push({
-                        step: stepNumber,
-                        name: item.name,
-                        x: rx, y: ry, z: rz, l: rl, h: rh, w: rw,
-                        weight: unitWeight,
-                        color: color,
-                        shapeType: 'fabric',
-                        stop: item.stop || 'Stop 1'
-                    });
-                    if (!isPrimary) rotatedCount++;
-                    if (rx + rl > maxX) maxX = rx + rl;
-                    placedCount++;
-                    totalPlaced++;
-                    totalPlacedVolume += rollVol;
-                    totalPlacedWeight += unitWeight;
-                    cogSumX += (rx + rl / 2) * unitWeight;
-                    cogSumY += (ry + rh / 2) * unitWeight;
-                    cogSumZ += (rz + rw / 2) * unitWeight;
-                };
+    while (true) {
+        if (hitPayloadLimit) break;
+        const remLen = CL - curX;
+        if (remLen < 0.08) break;
 
-                let curX = Math.round(maxX * 1000) / 1000;
-                if (!useAlongZ && canAlongX) {
-                    while (placedCount < qty && curX + rollL <= CL + 0.001) {
-                        const inDoorZone = (doorOpts && doorOpts.enforce && curX + rollL > CL - doorOpts.headerZone);
-                        const bayMaxH = inDoorZone ? Math.min(CH, doorOpts.doorH) : CH;
-                        const kLimit = calcMaxK(bayMaxH);
-                        let bayCap = 0;
-                        for (let k = 0; k < kLimit; k++) bayCap += (k % 2 === 0 ? nEvenX : nOddX);
+        let bestChoice = null;
+        for (let idx = 0; idx < pool.length; idx++) {
+            const p = pool[idx];
+            if (p.rem <= 0) continue;
+            if (enforcePayload && totalPlacedWeight + p.unitWeight > spec.payload * 1.05) continue;
 
-                        // If remaining rolls are too few to fill an alongX bay and crosswise (alongZ) packs
-                        // them in strictly less container length (e.g. 0.32m vs 1.60m), switch to alongZ!
-                        const remQty = qty - placedCount;
-                        if (allowDoorCrossFill && canAlongZ && remQty < bayCap && nColsZ > 0 && kLimit > 0) {
-                            const crossBaysNeeded = Math.ceil(remQty / (nColsZ * kLimit));
-                            if (crossBaysNeeded * rollD < rollL - 0.05) {
-                                break;
-                            }
-                        }
+            const canAlongX = (fabricMode !== "alongZ" && fabricMode !== "squareZ") &&
+                (p.rollL <= remLen + 0.001 && p.rollD <= CW + 0.001) &&
+                (!doorOpts || !doorOpts.enforce || (p.rollD <= doorOpts.doorW + 0.001 && p.rollD <= doorOpts.doorH + 0.001));
 
-                        for (let k = 0; k < kLimit && placedCount < qty; k++) {
-                            const ry = Math.round(k * hexDy * 1000) / 1000;
-                            const zOffset = (isStaggered && k % 2 === 1) ? (rollD / 2) : 0;
-                            const nCols = (k % 2 === 0) ? nEvenX : nOddX;
-                            for (let c = 0; c < nCols && placedCount < qty; c++) {
-                                if (enforcePayload && totalPlacedWeight + unitWeight > spec.payload * 1.05) {
-                                    hitPayloadLimit = true;
-                                    break;
-                                }
-                                const rz = Math.round((-CW / 2 + zOffset + c * rollD) * 1000) / 1000;
-                                recordRoll(curX, ry, rz, rollL, rollD, rollD, true);
-                            }
-                            if (hitPayloadLimit) break;
-                        }
-                        if (hitPayloadLimit) break;
-                        curX = Math.round((curX + rollL) * 1000) / 1000;
-                    }
-                    // Fill any remaining door-end space (< rollL) crosswise (along Z) if allowed
-                    if (allowDoorCrossFill && placedCount < qty && canAlongZ && curX + rollD <= CL + 0.001) {
-                        while (placedCount < qty && curX + rollD <= CL + 0.001) {
-                            const inDoorZone = (doorOpts && doorOpts.enforce && curX + rollD > CL - doorOpts.headerZone);
-                            const bayMaxH = inDoorZone ? Math.min(CH, doorOpts.doorH) : CH;
-                            const kLimit = calcMaxK(bayMaxH);
-                            for (let k = 0; k < kLimit && placedCount < qty; k++) {
-                                const ry = Math.round(k * hexDy * 1000) / 1000;
-                                const xShift = (k % 2 === 1) ? (rollD / 2) : 0;
-                                const rx = Math.round((curX + xShift) * 1000) / 1000;
-                                if (rx + rollD > CL + 0.001) continue;
-                                for (let c = 0; c < nColsZ && placedCount < qty; c++) {
-                                    if (enforcePayload && totalPlacedWeight + unitWeight > spec.payload * 1.05) {
-                                        hitPayloadLimit = true;
-                                        break;
-                                    }
-                                    const rz = Math.round((-CW / 2 + c * rollL) * 1000) / 1000;
-                                    recordRoll(rx, ry, rz, rollD, rollD, rollL, false);
-                                }
-                                if (hitPayloadLimit) break;
-                            }
-                            if (hitPayloadLimit) break;
-                            curX = Math.round((curX + rollD) * 1000) / 1000;
-                        }
-                    }
-                } else if (useAlongZ && canAlongZ) {
-                    while (placedCount < qty && curX + rollD <= CL + 0.001) {
-                        const inDoorZone = (doorOpts && doorOpts.enforce && curX + rollD > CL - doorOpts.headerZone);
-                        const bayMaxH = inDoorZone ? Math.min(CH, doorOpts.doorH) : CH;
-                        const kLimit = calcMaxK(bayMaxH);
-                        for (let k = 0; k < kLimit && placedCount < qty; k++) {
-                            const ry = Math.round(k * hexDy * 1000) / 1000;
-                            const xShift = (isStaggered && k % 2 === 1) ? (rollD / 2) : 0;
-                            const rx = Math.round((curX + xShift) * 1000) / 1000;
-                            if (rx + rollD > CL + 0.001) continue;
-                            for (let c = 0; c < nColsZ && placedCount < qty; c++) {
-                                if (enforcePayload && totalPlacedWeight + unitWeight > spec.payload * 1.05) {
-                                    hitPayloadLimit = true;
-                                    break;
-                                }
-                                const rz = Math.round((-CW / 2 + c * rollL) * 1000) / 1000;
-                                recordRoll(rx, ry, rz, rollD, rollD, rollL, false);
-                            }
-                            if (hitPayloadLimit) break;
-                        }
-                        if (hitPayloadLimit) break;
-                        curX = Math.round((curX + rollD) * 1000) / 1000;
+            if (canAlongX) {
+                const inDoor = (doorOpts && doorOpts.enforce && curX + p.rollL > CL - doorOpts.headerZone);
+                const kLim = calcMaxKFor(p, inDoor ? Math.min(CH, doorOpts.doorH) : CH);
+                const nEven = Math.floor((CW + 0.002) / p.rollD);
+                const nOdd = isStaggered ? Math.max(0, Math.floor((CW + 0.002 - p.rollD / 2) / p.rollD)) : nEven;
+                let bayCap = 0;
+                for (let k = 0; k < kLim; k++) bayCap += (k % 2 === 0 ? nEven : nOdd);
+                if (bayCap > 0) {
+                    const effCount = allowCrossSkuMix ? bayCap : Math.min(p.rem, bayCap);
+                    const score = (effCount * p.rollVol) / p.rollL;
+                    const isFullOwn = (p.rem >= bayCap);
+                    if (!bestChoice ||
+                        (isFullOwn && !bestChoice.isFullOwn) ||
+                        (isFullOwn === bestChoice.isFullOwn && score > bestChoice.score + 1e-5)) {
+                        bestChoice = { p, axis: "X", bayLen: p.rollL, kLim, nEven, nOdd, bayCap, score, isFullOwn };
                     }
                 }
-
-                // Seed floor candidate point after fabric rolls for any subsequent SKUs
-                this.addCandidatePoint(candidatePoints, maxX, 0, -CW / 2, CL, CW, CH);
-                const unplaced = qty - placedCount;
-                if (unplaced > 0) {
-                    unplacedItems.push({ ...item, remainingQty: unplaced });
-                }
-                continue;
             }
+
+            const canAlongZ = (fabricMode !== "alongX" && fabricMode !== "squareX") &&
+                (p.rotMode !== "locked") && (p.rollL <= CW + 0.001 && p.rollD <= remLen + 0.001) &&
+                (!doorOpts || !doorOpts.enforce || (p.rollL <= doorOpts.doorW + 0.001 && p.rollL <= doorOpts.doorH + 0.001));
+
+            if (canAlongZ) {
+                const inDoor = (doorOpts && doorOpts.enforce && curX + p.rollD > CL - doorOpts.headerZone);
+                const kLim = calcMaxKFor(p, inDoor ? Math.min(CH, doorOpts.doorH) : CH);
+                const nColsZ = Math.floor((CW + 0.002) / p.rollL);
+                const bayCap = nColsZ * kLim;
+                if (bayCap > 0) {
+                    const effCount = Math.min(p.rem, bayCap);
+                    const score = (effCount * p.rollVol) / p.rollD;
+                    const isFullOwn = (p.rem >= bayCap);
+                    const preferZ = (fabricMode === "alongZ" || fabricMode === "squareZ") || !canAlongX || (p.rem < bayCap && score > (bestChoice?.score || 0));
+                    if (preferZ && (!bestChoice || score > bestChoice.score + 1e-5)) {
+                        bestChoice = { p, axis: "Z", bayLen: p.rollD, kLim, nColsZ, bayCap, score, isFullOwn };
+                    }
+                }
+            }
+        }
+
+        if (!bestChoice) break;
+
+        const p = bestChoice.p;
+        if (bestChoice.axis === "X") {
+            let topUsedY = 0;
+            let bayRollsPlaced = 0;
+            for (let k = 0; k < bestChoice.kLim; k++) {
+                const ry = Math.round(k * p.hexDy * 1000) / 1000;
+                const zOffset = (isStaggered && k % 2 === 1) ? (p.rollD / 2) : 0;
+                const nCols = (k % 2 === 0) ? bestChoice.nEven : bestChoice.nOdd;
+                for (let c = 0; c < nCols; c++) {
+                    if (p.rem <= 0) break;
+                    if (enforcePayload && totalPlacedWeight + p.unitWeight > spec.payload * 1.05) {
+                        hitPayloadLimit = true;
+                        break;
+                    }
+                    const rz = Math.round((-CW / 2 + zOffset + c * p.rollD) * 1000) / 1000;
+                    recordPoolRoll(p, curX, ry, rz, p.rollL, p.rollD, p.rollD, true);
+                    bayRollsPlaced++;
+                    if (ry + p.rollD > topUsedY) topUsedY = ry + p.rollD;
+                }
+                if (hitPayloadLimit || p.rem <= 0) break;
+            }
+
+            if (allowCrossSkuMix && !hitPayloadLimit && bayRollsPlaced > 0) {
+                const inDoor = (doorOpts && doorOpts.enforce && curX + bestChoice.bayLen > CL - doorOpts.headerZone);
+                const bayMaxH = inDoor ? Math.min(CH, doorOpts.doorH) : CH;
+                if (topUsedY + 0.15 < bayMaxH) {
+                    for (let mIdx = 0; mIdx < pool.length && !hitPayloadLimit; mIdx++) {
+                        const mp = pool[mIdx];
+                        if (mp.rem <= 0 || mp.floorOnly) continue;
+                        if (mp.rollL > bestChoice.bayLen + 0.002) continue;
+                        while (mp.rem > 0 && topUsedY + mp.rollD <= bayMaxH + 0.001) {
+                            const ry = Math.round(topUsedY * 1000) / 1000;
+                            const nCols = Math.floor((CW + 0.002) / mp.rollD);
+                            let placedInRow = 0;
+                            for (let c = 0; c < nCols && mp.rem > 0; c++) {
+                                if (enforcePayload && totalPlacedWeight + mp.unitWeight > spec.payload * 1.05) {
+                                    hitPayloadLimit = true;
+                                    break;
+                                }
+                                const rz = Math.round((-CW / 2 + c * mp.rollD) * 1000) / 1000;
+                                recordPoolRoll(mp, curX, ry, rz, mp.rollL, mp.rollD, mp.rollD, true);
+                                placedInRow++;
+                            }
+                            if (placedInRow === 0 || hitPayloadLimit) break;
+                            topUsedY = Math.round((topUsedY + mp.hexDy) * 1000) / 1000;
+                        }
+                    }
+                }
+            }
+
+            curX = Math.round((curX + bestChoice.bayLen) * 1000) / 1000;
+        } else {
+            for (let k = 0; k < bestChoice.kLim && p.rem > 0; k++) {
+                const ry = Math.round(k * p.hexDy * 1000) / 1000;
+                const xShift = (isStaggered && k % 2 === 1) ? (p.rollD / 2) : 0;
+                const rx = Math.round((curX + xShift) * 1000) / 1000;
+                if (rx + p.rollD > CL + 0.001) continue;
+                for (let c = 0; c < bestChoice.nColsZ && p.rem > 0; c++) {
+                    if (enforcePayload && totalPlacedWeight + p.unitWeight > spec.payload * 1.05) {
+                        hitPayloadLimit = true;
+                        break;
+                    }
+                    const rz = Math.round((-CW / 2 + c * p.rollL) * 1000) / 1000;
+                    recordPoolRoll(p, rx, ry, rz, p.rollD, p.rollD, p.rollL, false);
+                }
+                if (hitPayloadLimit) break;
+            }
+            curX = Math.round((curX + bestChoice.bayLen) * 1000) / 1000;
+        }
+    }
+
+    this.addCandidatePoint(candidatePoints, maxX, 0, -CW / 2, CL, CW, CH);
+    for (let idx = 0; idx < pool.length; idx++) {
+        if (pool[idx].rem > 0) {
+            unplacedItems.push({ ...pool[idx].origItem, remainingQty: pool[idx].rem });
+        }
+    }
+    itemIdx = endItemIdx;
+    continue;
+}
 
             const primaryOri = { l: baseL, h: baseH, w: baseW, isPrimary: true };
             const rotOri = { l: baseW, h: baseH, w: baseL, isPrimary: false };
