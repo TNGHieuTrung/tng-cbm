@@ -2059,9 +2059,163 @@ document.addEventListener('DOMContentLoaded', () => {
     const auditVerdictBox = document.getElementById('auditVerdictBox');
     const auditVerdictPill = document.getElementById('auditVerdictPill');
     const auditVerdictMsg = document.getElementById('auditVerdictMsg');
+    const auditFabricSkuBody = document.getElementById('auditFabricSkuBody');
+    const btnAddAuditFabricRow = document.getElementById('btnAddAuditFabricRow');
+    const auditRadiusSwitcher = document.getElementById('auditRadiusSwitcher');
+    const auditRadColHeader = document.getElementById('auditRadColHeader');
+    const auditSkuTotBadge = document.getElementById('auditSkuTotBadge');
 
     let lastAuditReport = null;
     let uploadedSupplierPhotoUrl = '';
+    let auditRadMode = 'diameter'; // 'diameter' | 'radius'
+
+    function updateAuditSkuTotalBadge() {
+        if (!auditFabricSkuBody) return;
+        let totSup = 0;
+        let totLot = 0;
+        auditFabricSkuBody.querySelectorAll('tr').forEach(tr => {
+            totSup += (parseInt(tr.querySelector('.audit-row-sup-qty')?.value) || 0);
+            totLot += (parseInt(tr.querySelector('.audit-row-lot-qty')?.value) || 0);
+        });
+        const supQtyHidden = document.getElementById('auditSupplierQty');
+        if (supQtyHidden) supQtyHidden.value = totSup;
+        if (auditSkuTotBadge) {
+            auditSkuTotBadge.textContent = `Tổng lô: ${totLot.toLocaleString()} cây • NCC báo xếp: ${totSup.toLocaleString()} cây`;
+        }
+    }
+
+    function addAuditFabricRow(row = {}) {
+        if (!auditFabricSkuBody) return;
+        const idx = auditFabricSkuBody.querySelectorAll('tr').length + 1;
+        const dCm = parseFloat(row.diamCm) || 32;
+        const dispVal = auditRadMode === 'radius' ? parseFloat((dCm / 2).toFixed(2)) : parseFloat(dCm.toFixed(2));
+        const pairText = auditRadMode === 'radius' ? `Ø = ${parseFloat(dCm.toFixed(2))} cm` : `R = ${parseFloat((dCm / 2).toFixed(2))} cm`;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="audit-row-idx" style="text-align:center;font-weight:700;">${idx}</td>
+            <td><input type="text" class="audit-row-name" value="${row.name || `Vải mã ${idx}`}"></td>
+            <td><input type="number" class="audit-row-len" min="10" step="any" value="${row.lenCm || 160}"></td>
+            <td>
+                <input type="number" class="audit-row-rad" min="1" step="any" value="${dispVal}">
+                <span class="audit-rad-pair">${pairText}</span>
+            </td>
+            <td><input type="number" class="audit-row-wt" min="0" step="0.1" value="${row.wt ?? 28}"></td>
+            <td><input type="number" class="audit-row-lot-qty" min="1" value="${row.lotQty || 150}"></td>
+            <td><input type="number" class="audit-row-sup-qty" min="0" value="${row.supQty ?? 120}"></td>
+            <td style="text-align:center;"><button type="button" class="audit-del-row-btn" title="Xóa mã"><i class="fas fa-trash-alt"></i></button></td>
+        `;
+
+        const radInp = tr.querySelector('.audit-row-rad');
+        const pairSpan = tr.querySelector('.audit-rad-pair');
+        if (radInp && pairSpan) {
+            radInp.addEventListener('input', () => {
+                const v = parseFloat(radInp.value) || 0;
+                pairSpan.textContent = auditRadMode === 'radius'
+                    ? `Ø = ${parseFloat((v * 2).toFixed(2))} cm`
+                    : `R = ${parseFloat((v / 2).toFixed(2))} cm`;
+            });
+        }
+        tr.querySelectorAll('.audit-row-lot-qty, .audit-row-sup-qty').forEach(inp => {
+            inp.addEventListener('input', updateAuditSkuTotalBadge);
+        });
+        tr.querySelector('.audit-del-row-btn')?.addEventListener('click', () => {
+            if (auditFabricSkuBody.querySelectorAll('tr').length > 1) {
+                tr.remove();
+                auditFabricSkuBody.querySelectorAll('tr').forEach((r, i) => {
+                    const c = r.querySelector('.audit-row-idx');
+                    if (c) c.textContent = i + 1;
+                });
+                updateAuditSkuTotalBadge();
+            } else {
+                showToast('Cần ít nhất 1 mã cuộn vải trong bảng kiểm tra!', true);
+            }
+        });
+
+        auditFabricSkuBody.appendChild(tr);
+        updateAuditSkuTotalBadge();
+    }
+
+    function setAuditFabricRows(rows) {
+        if (!auditFabricSkuBody) return;
+        auditFabricSkuBody.innerHTML = '';
+        rows.forEach(r => addAuditFabricRow(r));
+    }
+
+    function getAuditFabricCargoItems() {
+        if (!auditFabricSkuBody) return [];
+        const items = [];
+        auditFabricSkuBody.querySelectorAll('tr').forEach((tr, idx) => {
+            const name = (tr.querySelector('.audit-row-name')?.value || `Vải mã ${idx + 1}`).trim();
+            const lenCm = parseFloat(tr.querySelector('.audit-row-len')?.value) || 160;
+            const rawRad = parseFloat(tr.querySelector('.audit-row-rad')?.value) || 32;
+            const diamCm = auditRadMode === 'radius' ? (rawRad * 2) : rawRad;
+            const wt = Math.max(0, parseFloat(tr.querySelector('.audit-row-wt')?.value) || 0);
+            const lotQty = Math.max(1, parseInt(tr.querySelector('.audit-row-lot-qty')?.value) || 1);
+            const supQty = Math.max(0, parseInt(tr.querySelector('.audit-row-sup-qty')?.value) || 0);
+
+            items.push({
+                name,
+                lCm: lenCm,
+                wCm: diamCm,
+                hCm: diamCm,
+                length: lenCm,
+                width: diamCm,
+                height: diamCm,
+                qty: lotQty,
+                supQty: supQty,
+                weight: wt,
+                color: defaultColors[idx % defaultColors.length],
+                type: 'fabric',
+                rotation: 'fit',
+                stackable: true,
+                stop: 'Stop 1'
+            });
+        });
+        return items;
+    }
+
+    if (auditRadiusSwitcher) {
+        auditRadiusSwitcher.querySelectorAll('.unit-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const newMode = btn.getAttribute('data-rad-mode') || 'diameter';
+                if (newMode === auditRadMode) return;
+                const oldMode = auditRadMode;
+                auditRadMode = newMode;
+                auditRadiusSwitcher.querySelectorAll('.unit-btn').forEach(b => b.classList.toggle('active', b === btn));
+                if (auditRadColHeader) {
+                    auditRadColHeader.textContent = newMode === 'radius' ? 'R Bán kính (cm)' : 'Ø Đường kính (cm)';
+                }
+                if (auditFabricSkuBody) {
+                    auditFabricSkuBody.querySelectorAll('tr').forEach(tr => {
+                        const inp = tr.querySelector('.audit-row-rad');
+                        const pairSpan = tr.querySelector('.audit-rad-pair');
+                        if (!inp) return;
+                        const v = parseFloat(inp.value) || 0;
+                        const diamCm = oldMode === 'radius' ? (v * 2) : v;
+                        inp.value = newMode === 'radius' ? parseFloat((diamCm / 2).toFixed(2)) : parseFloat(diamCm.toFixed(2));
+                        if (pairSpan) {
+                            pairSpan.textContent = newMode === 'radius'
+                                ? `Ø = ${parseFloat(diamCm.toFixed(2))} cm`
+                                : `R = ${parseFloat((diamCm / 2).toFixed(2))} cm`;
+                        }
+                    });
+                }
+                showToast(`Đã chuyển cột nhập sang ${newMode === 'radius' ? 'Bán kính R (cm)' : 'Đường kính Ø (cm)'}`);
+            });
+        });
+    }
+
+    if (btnAddAuditFabricRow) {
+        btnAddAuditFabricRow.addEventListener('click', () => addAuditFabricRow());
+    }
+
+    // Seed default 3 fabric rows on startup so table is immediately ready for input
+    setAuditFabricRows([
+        { name: 'Vải Kaki 160cm', lenCm: 160, diamCm: 32, wt: 28, lotQty: 180, supQty: 150 },
+        { name: 'Vải Denim 150cm', lenCm: 150, diamCm: 34, wt: 32, lotQty: 110, supQty: 90 },
+        { name: 'Vải Thun Cotton 175cm', lenCm: 175, diamCm: 28, wt: 22, lotQty: 95, supQty: 40 }
+    ]);
 
     if (btnOpenSupplierAuditTop && supplierAuditSection) {
         btnOpenSupplierAuditTop.addEventListener('click', () => {
@@ -2071,30 +2225,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (btnLoadFabricSample) {
         btnLoadFabricSample.addEventListener('click', () => {
-            const fabricSampleRows = [
-                { name: 'Vải Kaki 160cm (Ø32)', lCm: 160, wCm: 32, hCm: 32, qty: 180, weight: 28, color: '#0284c7', type: 'fabric', stop: 'Stop 1' },
-                { name: 'Vải Denim 150cm (Ø34)', lCm: 150, wCm: 34, hCm: 34, qty: 110, weight: 32, color: '#4f46e5', type: 'fabric', stop: 'Stop 1' },
-                { name: 'Vải Thun Cotton 175cm (Ø28)', lCm: 175, wCm: 28, hCm: 28, qty: 95, weight: 22, color: '#0d9488', type: 'fabric', stop: 'Stop 1' }
-            ];
-            if (enforcePayloadToggle) enforcePayloadToggle.checked = true;
-            if (autoFitToggle) autoFitToggle.checked = false;
-            selectEquipment('40hc', false);
-            applyCargoItemsToCards(fabricSampleRows, 'replace');
-            activeContainers = ['40hc'];
-
-            const supQtyInp = document.getElementById('auditSupplierQty');
+            setAuditFabricRows([
+                { name: 'Vải Kaki 160cm', lenCm: 160, diamCm: 32, wt: 28, lotQty: 180, supQty: 145 },
+                { name: 'Vải Denim 150cm', lenCm: 150, diamCm: 34, wt: 32, lotQty: 110, supQty: 85 },
+                { name: 'Vải Thun Cotton 175cm', lenCm: 175, diamCm: 28, wt: 22, lotQty: 95, supQty: 30 }
+            ]);
             const supTypeSel = document.getElementById('auditContType');
             const supCntInp = document.getElementById('auditContCount');
+            const supMethodSel = document.getElementById('auditSupplierMethod');
             const supNoteInp = document.getElementById('auditSupplierNote');
             if (supTypeSel) supTypeSel.value = '40hc';
             if (supCntInp) supCntInp.value = 1;
-            if (supQtyInp) supQtyInp.value = 310;
-            if (supNoteInp) supNoteInp.value = 'NCC báo cont 40HC chỉ xếp được 310 cây, dư 75 cây yêu cầu tách lô / đi LCL';
+            if (supMethodSel) supMethodSel.value = 'squareX';
+            if (supNoteInp) supNoteInp.value = 'NCC xếp thẳng không sole, báo cont 40HC chỉ vừa 260 cây, dư 125 cây đòi đi thêm cont/LCL';
 
-            showToast('Đã nạp mẫu 3 mã Cuộn vải (385 cây) — sẵn sàng đối chiếu tải hàng NCC!');
+            showToast('Đã nạp mẫu 3 mã Cuộn vải (385 cây) — đang đối chiếu cách xếp của NCC!');
             setTimeout(() => {
                 if (btnRunSupplierAudit) btnRunSupplierAudit.click();
-            }, 350);
+            }, 250);
         });
     }
 
@@ -2120,39 +2268,59 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function runSupplierAudit() {
         if (!simulation) return;
-        const cargoItems = getCargoData();
-        if (!cargoItems || cargoItems.length === 0) {
-            showToast('Vui lòng nhập hoặc bật ít nhất 1 mã hàng trước khi kiểm tra!', true);
+        const auditItems = getAuditFabricCargoItems();
+        if (!auditItems || auditItems.length === 0) {
+            showToast('Vui lòng nhập ít nhất 1 mã cuộn vải trong bảng kiểm tra!', true);
             return;
         }
 
         const supName = (document.getElementById('auditSupplierName')?.value || 'Nhà cung cấp Vải').trim();
         const contType = document.getElementById('auditContType')?.value || '40hc';
         const contCount = Math.max(1, parseInt(document.getElementById('auditContCount')?.value) || 1);
-        const supQty = Math.max(1, parseInt(document.getElementById('auditSupplierQty')?.value) || 1);
+        const supMethod = document.getElementById('auditSupplierMethod')?.value || 'squareX';
+        const supQty = auditItems.reduce((s, it) => s + (it.supQty || 0), 0);
+        const totalLotQty = auditItems.reduce((s, it) => s + (it.qty || 0), 0);
         const supNote = (document.getElementById('auditSupplierNote')?.value || '').trim();
         const auditPayload = document.getElementById('auditEnforcePayload')?.checked !== false;
         const selectedAlgo = document.querySelector('input[name="algorithm"]:checked')?.value || 'best-balance';
 
+        // Sync fabric SKU table rows into main cargo cards (converted to cm, type='fabric') so 3D view matches 100%
+        if (enforcePayloadToggle) enforcePayloadToggle.checked = auditPayload;
+        if (autoFitToggle) autoFitToggle.checked = false;
+        applyCargoItemsToCards(auditItems, 'replace');
+
         const auditFleet = Array(contCount).fill(contType);
 
-        // 1. Physical Max (0% margin)
-        const maxRes = simulation.packMultiContainers(cargoItems, selectedAlgo, auditFleet, {
+        // 1. Capacity under Supplier's claimed loading method (e.g. squareX = no stagger, or crosswise)
+        const methodRes = simulation.packMultiContainers(auditItems, selectedAlgo, auditFleet, {
+            marginL: 2, marginW: 2, marginH: 0,
+            enforceDoorClearance: isDoorClearanceEnforced(),
+            enforcePayload: auditPayload,
+            fabricMode: supMethod
+        });
+        const methodCap = methodRes.totalPlaced;
+        const methodUtil = methodRes.containers[0]?.utilization || '0.0';
+
+        // 2. Physical Max (0% margin, optimal hexagonal nesting)
+        const maxRes = simulation.packMultiContainers(auditItems, selectedAlgo, auditFleet, {
             marginL: 0, marginW: 0, marginH: 0,
             enforceDoorClearance: isDoorClearanceEnforced(),
-            enforcePayload: auditPayload
+            enforcePayload: auditPayload,
+            fabricMode: 'auto'
         });
         const maxCap = maxRes.totalPlaced;
 
-        // 2. Practical Benchmark (2% L/W shrink margin + door + payload) — leaves this as the displayed 3D simulation
-        const practRes = simulation.packMultiContainers(cargoItems, selectedAlgo, auditFleet, {
+        // 3. Optimal AI TNG Benchmark (2% L/W shrink margin + optimal hex nesting + crosswise door fill) — displayed in 3D canvas
+        const practRes = simulation.packMultiContainers(auditItems, selectedAlgo, auditFleet, {
             marginL: 2, marginW: 2, marginH: 0,
             enforceDoorClearance: isDoorClearanceEnforced(),
-            enforcePayload: auditPayload
+            enforcePayload: auditPayload,
+            fabricMode: 'auto'
         });
         const practicalCap = practRes.totalPlaced;
+        const practicalUtil = practRes.containers[0]?.utilization || '0.0';
 
-        // Sync main simulator UI to show the audited fleet
+        // Sync main simulator UI to show the optimal audited fleet
         activeContainers = auditFleet.slice();
         selectedEquipment = contType;
         renderContainerTabs(practRes);
@@ -2166,25 +2334,29 @@ document.addEventListener('DOMContentLoaded', () => {
             if (audit3dDoorPlaceholder) audit3dDoorPlaceholder.style.display = 'none';
         }
 
-        // Compute Verdict
+        // Compute Verdict (evaluates BOTH quantity accuracy AND space optimization of supplier's method)
         let status = 'ok';
-        let pillText = '🟢 HỢP LÝ / ĐẠT CHUẨN';
+        let pillText = '🟢 TỐI ƯU & ĐẠT CHUẨN';
         let msg = '';
         const diffPract = practicalCap - supQty;
+        const methodGap = practicalCap - methodCap;
         const ratioPct = practicalCap > 0 ? ((supQty / practicalCap) * 100).toFixed(1) : '100.0';
 
         if (supQty > maxCap) {
             status = 'danger';
             pillText = '🔴 BẤT THƯỜNG — NGHI VẤN KHAI KHỐNG';
-            msg = `NCC báo đã đóng ${supQty.toLocaleString()} cây/kiện vào ${contCount}×${contType.toUpperCase()}, nhưng giới hạn vật lý tối đa (0% sai số${auditPayload ? ' & tải trọng' : ''}) chỉ chứa được ${maxCap.toLocaleString()} cây/kiện. Cần kiểm tra lại đường kính cuộn vải hoặc Packing List ngay!`;
+            msg = `NCC báo đã đóng ${supQty.toLocaleString()} cây vào ${contCount}×${contType.toUpperCase()}, nhưng trần vật lý tối đa (0% sai số${auditPayload ? ' & tải trọng' : ''}) chỉ chứa được ${maxCap.toLocaleString()} cây. Cần yêu cầu NCC đo lại đường kính/bán kính cuộn vải hoặc kiểm tra lại Packing List!`;
         } else if (supQty < Math.floor(practicalCap * 0.94)) {
             status = 'warn';
-            pillText = '🟡 XẾP CHƯA TỐI ƯU — LÃNG PHÍ CHỖ';
-            msg = `AI TNG chứng minh ${contCount}×${contType.toUpperCase()} xếp thực tế (đã trừ 2% sai số) được ${practicalCap.toLocaleString()} cây/kiện — nhiều hơn NCC báo ${diffPract.toLocaleString()} cây/kiện (NCC mới đạt ${ratioPct}%). Có thể gửi sơ đồ 3D yêu cầu NCC xếp lại!`;
+            pillText = '🟡 CHƯA TỐI ƯU KHÔNG GIAN CONT';
+            const methodNote = (supMethod !== 'auto' && methodGap > 0)
+                ? ` Cách NCC đang xếp (${methodCap.toLocaleString()} cây, ${methodUtil}% cont) mất ${methodGap.toLocaleString()} cây do chưa xếp sole tổ ong / chưa tận dụng khe cửa.`
+                : '';
+            msg = `NCC báo xếp được ${supQty.toLocaleString()}/${totalLotQty.toLocaleString()} cây (đạt ${ratioPct}% năng lực).${methodNote} Phương án tối ưu AI TNG (xếp sole tổ ong) xếp được ${practicalCap.toLocaleString()} cây (${practicalUtil}% cont) — TĂNG THÊM +${diffPract.toLocaleString()} CÂY!`;
         } else {
             status = 'ok';
-            pillText = '🟢 HỢP LÝ / ĐẠT CHUẨN';
-            msg = `Số lượng NCC xếp (${supQty.toLocaleString()} cây/kiện) đạt ${ratioPct}% so với chuẩn tối ưu thực tế TNG (${practicalCap.toLocaleString()} cây/kiện; trần tối đa ${maxCap.toLocaleString()}).`;
+            pillText = '🟢 TỐI ƯU & ĐẠT CHUẨN';
+            msg = `Cách sắp xếp của NCC (${supQty.toLocaleString()} cây) đã tối ưu tốt không gian cont, đạt ${ratioPct}% so với phương án tối ưu AI TNG (${practicalCap.toLocaleString()} cây, ${practicalUtil}% thể tích; trần 0%: ${maxCap.toLocaleString()} cây).`;
         }
 
         if (auditVerdictBox) auditVerdictBox.style.display = 'block';
@@ -2195,21 +2367,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (auditVerdictMsg) auditVerdictMsg.textContent = msg;
 
         const elSup = document.getElementById('vKpiSupplier');
+        const elMeth = document.getElementById('vKpiMethodCap');
         const elPra = document.getElementById('vKpiPractical');
         const elMax = document.getElementById('vKpiMax');
-        const elDif = document.getElementById('vKpiDiff');
-        if (elSup) elSup.textContent = `${supQty.toLocaleString()} cây/kiện`;
-        if (elPra) elPra.textContent = `${practicalCap.toLocaleString()} cây/kiện`;
-        if (elMax) elMax.textContent = `${maxCap.toLocaleString()} cây/kiện`;
-        if (elDif) {
-            elDif.textContent = diffPract >= 0 ? `+${diffPract.toLocaleString()} (TNG xếp thêm)` : `${diffPract.toLocaleString()} (Vượt trần)`;
-            elDif.style.color = diffPract > 0 ? '#d97706' : (diffPract < 0 ? '#dc2626' : '#059669');
-        }
+        if (elSup) elSup.textContent = `${supQty.toLocaleString()} cây`;
+        if (elMeth) elMeth.textContent = `${methodCap.toLocaleString()} cây (${methodUtil}%)`;
+        if (elPra) elPra.textContent = `${practicalCap.toLocaleString()} cây (${practicalUtil}%)`;
+        if (elMax) elMax.textContent = `${maxCap.toLocaleString()} cây`;
 
         lastAuditReport = {
-            supName, contType, contCount, supQty, supNote, auditPayload,
-            practicalCap, maxCap, diffPract, ratioPct, status, pillText, msg,
+            supName, contType, contCount, supQty, totalLotQty, supNote, supMethod, auditPayload,
+            methodCap, methodUtil, practicalCap, practicalUtil, maxCap, diffPract, ratioPct, status, pillText, msg,
             doorImg,
+            auditItems,
             reportContainers: simulation.captureAllContainersReportData()
         };
     }

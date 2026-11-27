@@ -738,10 +738,12 @@ class ContainerSimulation {
 
             // Dedicated Hexagonal-Nested Horizontal Cylinder Solver for Fabric Rolls (Cuộn vải nằm ngang xếp sole)
             if (shapeType === 'fabric') {
+                const fabricMode = options.fabricMode || 'auto'; // 'auto' | 'alongX' | 'alongZ' | 'squareX' | 'squareZ'
+                const isStaggered = !(fabricMode === 'squareX' || fabricMode === 'squareZ');
                 const rollL = baseL;
                 const rollD = Math.max(baseW, baseH);
                 const maxLayers = parseInt(item.maxLayers) || 0;
-                const hexDy = rollD * 0.86602540378; // sqrt(3)/2 vertical pitch for staggered honeycomb nesting
+                const hexDy = isStaggered ? (rollD * 0.86602540378) : rollD; // sqrt(3)/2 vertical pitch for staggered honeycomb nesting
 
                 const calcMaxK = (availH) => {
                     if (floorOnly) return (rollD <= availH + 0.001) ? 1 : 0;
@@ -754,7 +756,7 @@ class ContainerSimulation {
                 const canAlongX = (rollL <= CL + 0.001 && rollD <= CW + 0.001) &&
                     (!doorOpts || !doorOpts.enforce || (rollD <= doorOpts.doorW + 0.001 && rollD <= doorOpts.doorH + 0.001));
                 const nEvenX = Math.floor((CW + 0.002) / rollD);
-                const nOddX = Math.max(0, Math.floor((CW + 0.002 - rollD / 2) / rollD));
+                const nOddX = isStaggered ? Math.max(0, Math.floor((CW + 0.002 - rollD / 2) / rollD)) : nEvenX;
                 const maxKX = calcMaxK(CH);
                 let perBayX = 0;
                 for (let k = 0; k < maxKX; k++) perBayX += (k % 2 === 0 ? nEvenX : nOddX);
@@ -767,7 +769,10 @@ class ContainerSimulation {
                 const maxKZ = calcMaxK(CH);
                 const densZ = canAlongZ && rollD > 0 ? ((nColsZ * maxKZ) / rollD) : -1;
 
-                const useAlongZ = (densZ > densX + 0.05);
+                let useAlongZ = (densZ > densX + 0.05);
+                if (fabricMode === 'alongX' || fabricMode === 'squareX') useAlongZ = false;
+                if (fabricMode === 'alongZ' || fabricMode === 'squareZ') useAlongZ = true;
+                const allowDoorCrossFill = (fabricMode === 'auto');
                 const rollVol = Math.PI * Math.pow(rollD / 2, 2) * rollL;
 
                 const recordRoll = (rx, ry, rz, rl, rh, rw, isPrimary) => {
@@ -804,9 +809,22 @@ class ContainerSimulation {
                         const inDoorZone = (doorOpts && doorOpts.enforce && curX + rollL > CL - doorOpts.headerZone);
                         const bayMaxH = inDoorZone ? Math.min(CH, doorOpts.doorH) : CH;
                         const kLimit = calcMaxK(bayMaxH);
+                        let bayCap = 0;
+                        for (let k = 0; k < kLimit; k++) bayCap += (k % 2 === 0 ? nEvenX : nOddX);
+
+                        // If remaining rolls are too few to fill an alongX bay and crosswise (alongZ) packs
+                        // them in strictly less container length (e.g. 0.32m vs 1.60m), switch to alongZ!
+                        const remQty = qty - placedCount;
+                        if (allowDoorCrossFill && canAlongZ && remQty < bayCap && nColsZ > 0 && kLimit > 0) {
+                            const crossBaysNeeded = Math.ceil(remQty / (nColsZ * kLimit));
+                            if (crossBaysNeeded * rollD < rollL - 0.05) {
+                                break;
+                            }
+                        }
+
                         for (let k = 0; k < kLimit && placedCount < qty; k++) {
                             const ry = Math.round(k * hexDy * 1000) / 1000;
-                            const zOffset = (k % 2 === 1) ? (rollD / 2) : 0;
+                            const zOffset = (isStaggered && k % 2 === 1) ? (rollD / 2) : 0;
                             const nCols = (k % 2 === 0) ? nEvenX : nOddX;
                             for (let c = 0; c < nCols && placedCount < qty; c++) {
                                 if (enforcePayload && totalPlacedWeight + unitWeight > spec.payload * 1.05) {
@@ -822,7 +840,7 @@ class ContainerSimulation {
                         curX = Math.round((curX + rollL) * 1000) / 1000;
                     }
                     // Fill any remaining door-end space (< rollL) crosswise (along Z) if allowed
-                    if (placedCount < qty && canAlongZ && curX + rollD <= CL + 0.001) {
+                    if (allowDoorCrossFill && placedCount < qty && canAlongZ && curX + rollD <= CL + 0.001) {
                         while (placedCount < qty && curX + rollD <= CL + 0.001) {
                             const inDoorZone = (doorOpts && doorOpts.enforce && curX + rollD > CL - doorOpts.headerZone);
                             const bayMaxH = inDoorZone ? Math.min(CH, doorOpts.doorH) : CH;
@@ -853,7 +871,7 @@ class ContainerSimulation {
                         const kLimit = calcMaxK(bayMaxH);
                         for (let k = 0; k < kLimit && placedCount < qty; k++) {
                             const ry = Math.round(k * hexDy * 1000) / 1000;
-                            const xShift = (k % 2 === 1) ? (rollD / 2) : 0;
+                            const xShift = (isStaggered && k % 2 === 1) ? (rollD / 2) : 0;
                             const rx = Math.round((curX + xShift) * 1000) / 1000;
                             if (rx + rollD > CL + 0.001) continue;
                             for (let c = 0; c < nColsZ && placedCount < qty; c++) {

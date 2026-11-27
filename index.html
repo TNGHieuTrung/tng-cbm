@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="styles.css?v=20261128-f1">
+    <link rel="stylesheet" href="styles.css?v=20261128-f2">
 </head>
 <body>
     <!-- Navigation -->
@@ -787,10 +787,45 @@
                 </div>
 
                 <div class="audit-grid">
-                    <!-- Left: Supplier Claim Inputs & Automated Verdict -->
+                    <!-- Left: Per-SKU Fabric Roll Input, Supplier Claim & Automated Verdict -->
                     <div class="audit-panel">
-                        <h4><i class="fas fa-file-invoice"></i> 1. Thông tin Nhà cung cấp báo cáo</h4>
-                        <div class="audit-form-grid">
+                        <div class="audit-panel-top">
+                            <h4><i class="fas fa-scroll"></i> 1. Nhập thông số từng mã Cuộn vải &amp; SL NCC báo</h4>
+                            <div class="audit-radius-bar">
+                                <span>Nhập theo:</span>
+                                <div class="unit-switcher" id="auditRadiusSwitcher">
+                                    <button type="button" class="unit-btn active" data-rad-mode="diameter">Ø Đường kính (cm)</button>
+                                    <button type="button" class="unit-btn" data-rad-mode="radius">R Bán kính (cm)</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Per-SKU Fabric Roll Table -->
+                        <div class="audit-sku-table-wrap">
+                            <table class="audit-sku-table" id="auditFabricSkuTable">
+                                <thead>
+                                    <tr>
+                                        <th style="width:28px;">#</th>
+                                        <th>Mã hàng / Vải</th>
+                                        <th>Khổ L (cm)</th>
+                                        <th id="auditRadColHeader">Ø Đường kính (cm)</th>
+                                        <th>KL (kg)</th>
+                                        <th>SL Lô hàng</th>
+                                        <th>SL NCC xếp</th>
+                                        <th style="width:32px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="auditFabricSkuBody">
+                                    <!-- Dynamic fabric rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="audit-sku-actions">
+                            <button type="button" class="bulk-mini-btn" id="btnAddAuditFabricRow"><i class="fas fa-plus"></i> Thêm mã vải</button>
+                            <span class="audit-sku-tot-badge" id="auditSkuTotBadge">Tổng NCC báo: 0 cây</span>
+                        </div>
+
+                        <div class="audit-form-grid" style="margin-top:12px;">
                             <label class="audit-field">
                                 <span>Tên Nhà cung cấp / Lô hàng</span>
                                 <input type="text" id="auditSupplierName" value="NCC Vải dệt (Fabric Supplier)">
@@ -809,13 +844,20 @@
                                 <input type="number" id="auditContCount" min="1" max="20" value="1">
                             </label>
                             <label class="audit-field">
-                                <span>Tổng cây/kiện NCC xếp được</span>
-                                <input type="number" id="auditSupplierQty" min="1" value="460">
+                                <span>Cách NCC đang xếp</span>
+                                <select id="auditSupplierMethod">
+                                    <option value="squareX" selected>Xếp dọc cont — Xếp thẳng (không sole)</option>
+                                    <option value="alongX">Xếp dọc cont — Xếp sole tổ ong</option>
+                                    <option value="squareZ">Xếp ngang cont — Xếp thẳng (không sole)</option>
+                                    <option value="alongZ">Xếp ngang cont — Xếp sole tổ ong</option>
+                                    <option value="auto">Chưa rõ cách xếp (So với tối ưu)</option>
+                                </select>
                             </label>
                         </div>
+                        <input type="hidden" id="auditSupplierQty" value="310">
                         <label class="audit-field" style="margin-top:8px;">
                             <span>Ghi chú / Lý do NCC đưa ra</span>
-                            <input type="text" id="auditSupplierNote" placeholder="VD: NCC báo hết chỗ, dư 100 cây phải tách sang cont sau / đi LCL">
+                            <input type="text" id="auditSupplierNote" placeholder="VD: NCC báo hết chỗ, dư cây phải tách sang cont sau / đi LCL">
                         </label>
                         <div class="audit-options-row">
                             <label class="audit-check-label">
@@ -823,7 +865,7 @@
                                 <span>⚖️ Kiểm tra giới hạn tải trọng (Khuyên bật cho vải cuộn nặng)</span>
                             </label>
                             <button type="button" class="audit-run-btn" id="btnRunSupplierAudit">
-                                <i class="fas fa-bolt"></i> Chạy đối chiếu &amp; Chấm điểm NCC
+                                <i class="fas fa-bolt"></i> Kiểm tra tối ưu &amp; Chấm điểm NCC
                             </button>
                         </div>
 
@@ -842,16 +884,16 @@
                                     <strong id="vKpiSupplier">0</strong>
                                 </div>
                                 <div class="v-kpi">
-                                    <span>Chuẩn TNG (2% sai số)</span>
+                                    <span>Theo cách của NCC</span>
+                                    <strong id="vKpiMethodCap">0</strong>
+                                </div>
+                                <div class="v-kpi">
+                                    <span>Tối ưu AI TNG (Sole)</span>
                                     <strong id="vKpiPractical" style="color:#0d9488;">0</strong>
                                 </div>
                                 <div class="v-kpi">
                                     <span>Trần vật lý (0%)</span>
                                     <strong id="vKpiMax">0</strong>
-                                </div>
-                                <div class="v-kpi">
-                                    <span>Chênh lệch / Tiết kiệm</span>
-                                    <strong id="vKpiDiff">0</strong>
                                 </div>
                             </div>
                         </div>
@@ -1352,7 +1394,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="i18n.js?v=20261128-f1"></script>
-    <script src="simulation3d.js?v=20261128-f1"></script>
-    <script src="main.js?v=20261128-f1"></script>
+    <script src="simulation3d.js?v=20261128-f4"></script>
+    <script src="main.js?v=20261128-f4"></script>
 </body>
 </html>
