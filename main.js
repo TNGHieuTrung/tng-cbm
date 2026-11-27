@@ -133,6 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const marginHVal = document.getElementById('marginHVal');
     const effectiveDimDisplay = document.getElementById('effectiveDimDisplay');
     const shrinkPresetBtns = document.querySelectorAll('.shrink-preset-btn');
+    const marginCustomInput = document.getElementById('marginCustomInput');
     const smartFleetBar = document.getElementById('smartFleetBar');
     const smartFleetPills = document.getElementById('smartFleetPills');
     const btnIncludeAll = document.getElementById('btnIncludeAll');
@@ -168,12 +169,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (eqDoorDisplay && data.doorStr) {
             eqDoorDisplay.textContent = data.doorStr;
         }
-        // Highlight matching preset chip
+        // Highlight matching preset chip & sync custom % box when all 3 axes match
+        let matchedPreset = false;
         shrinkPresetBtns.forEach(btn => {
             const presetVal = parseFloat(btn.getAttribute('data-margin'));
             const match = (opts.marginL === presetVal && opts.marginW === presetVal && opts.marginH === presetVal);
             btn.classList.toggle('active', match);
+            if (match) matchedPreset = true;
         });
+        if (marginCustomInput && document.activeElement !== marginCustomInput) {
+            if (opts.marginL === opts.marginW && opts.marginW === opts.marginH) {
+                marginCustomInput.value = opts.marginL;
+            }
+            const customBox = marginCustomInput.closest('.shrink-custom-box');
+            if (customBox) customBox.classList.toggle('active', !matchedPreset && (opts.marginL > 0 || opts.marginW > 0 || opts.marginH > 0));
+        }
     }
 
     const bestFitBanner = document.getElementById('bestFitBanner');
@@ -269,10 +279,24 @@ document.addEventListener('DOMContentLoaded', () => {
             if (marginLSlider) marginLSlider.value = val;
             if (marginWSlider) marginWSlider.value = val;
             if (marginHSlider) marginHSlider.value = val;
+            if (marginCustomInput) marginCustomInput.value = val;
             updateEffectiveDimsUI();
             triggerLiveSimulation();
         });
     });
+
+    if (marginCustomInput) {
+        marginCustomInput.addEventListener('input', () => {
+            let v = parseFloat(marginCustomInput.value);
+            if (isNaN(v)) return;
+            v = Math.max(0, Math.min(15, v));
+            if (marginLSlider) marginLSlider.value = v;
+            if (marginWSlider) marginWSlider.value = v;
+            if (marginHSlider) marginHSlider.value = v;
+            updateEffectiveDimsUI();
+            triggerLiveSimulation();
+        });
+    }
 
     updateEffectiveDimsUI();
 

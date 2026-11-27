@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="styles.css?v=20261127-p2b">
+    <link rel="stylesheet" href="styles.css?v=20261127-p2e">
 </head>
 <body>
     <!-- Navigation -->
@@ -214,21 +214,27 @@
                             <div class="shrink-presets">
                                 <button type="button" class="shrink-preset-btn active" data-margin="0">0% (Lý thuyết)</button>
                                 <button type="button" class="shrink-preset-btn" data-margin="2">2% (May mặc chuẩn)</button>
+                                <button type="button" class="shrink-preset-btn" data-margin="3">3% (Phồng vừa)</button>
                                 <button type="button" class="shrink-preset-btn" data-margin="5">5% (An toàn cao)</button>
+                                <label class="shrink-custom-box" title="Nhập trực tiếp % dự phòng tùy chỉnh (0 - 15%) áp dụng đồng loạt cho cả 3 chiều Dài/Rộng/Cao">
+                                    <span>Tùy chỉnh:</span>
+                                    <input type="number" id="marginCustomInput" min="0" max="15" step="0.5" value="0" placeholder="%">
+                                    <span>%</span>
+                                </label>
                             </div>
                         </div>
                         <div class="shrink-sliders-row">
                             <label class="shrink-slider-item">
                                 <span>Dài (L): <strong id="marginLVal">0%</strong></span>
-                                <input type="range" id="marginLSlider" min="0" max="10" step="1" value="0">
+                                <input type="range" id="marginLSlider" min="0" max="15" step="0.5" value="0">
                             </label>
                             <label class="shrink-slider-item">
                                 <span>Rộng (W): <strong id="marginWVal">0%</strong></span>
-                                <input type="range" id="marginWSlider" min="0" max="10" step="1" value="0">
+                                <input type="range" id="marginWSlider" min="0" max="15" step="0.5" value="0">
                             </label>
                             <label class="shrink-slider-item">
                                 <span>Cao (H): <strong id="marginHVal">0%</strong></span>
-                                <input type="range" id="marginHSlider" min="0" max="10" step="1" value="0">
+                                <input type="range" id="marginHSlider" min="0" max="15" step="0.5" value="0">
                             </label>
                         </div>
                     </div>
@@ -1217,6 +1223,6 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="i18n.js?v=20261127-p2c"></script>
     <script src="simulation3d.js?v=20261127-p2"></script>
-    <script src="main.js?v=20261127-p2d"></script>
+    <script src="main.js?v=20261127-p2e"></script>
 </body>
 </html>
