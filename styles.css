@@ -2426,6 +2426,134 @@ img { max-width: 100%; }
     margin: 0;
 }
 
+.audit-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.audit-pl-btn {
+    border-color: #2563eb;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+.audit-pl-btn:hover {
+    background: #2563eb;
+    color: #ffffff;
+}
+
+.audit-pl-paste-box {
+    background: #f8fafc;
+    border: 1px dashed #94a3b8;
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+}
+
+.audit-pl-paste-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 0.82rem;
+    color: #1e293b;
+}
+
+.audit-pl-paste-box textarea {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.78rem;
+    resize: vertical;
+}
+
+.audit-pl-paste-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 8px;
+}
+
+.audit-pl-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: #f0fdfa;
+    border: 1px solid #99f6e4;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    font-size: 0.82rem;
+    color: #0f766e;
+}
+
+.audit-pl-cont-select-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+}
+
+.audit-pl-cont-select-wrap select {
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid #5eead4;
+    background: #ffffff;
+    color: #0f172a;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.audit-diam-est-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+}
+
+.audit-est-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #334155;
+}
+
+.audit-est-label select,
+.audit-density-wrap select {
+    padding: 5px 8px;
+    border-radius: 7px;
+    border: 1px solid #cbd5e1;
+    font-size: 0.78rem;
+    background: #f8fafc;
+    color: #0f172a;
+}
+
+.audit-density-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.audit-density-wrap input {
+    width: 66px;
+    padding: 5px 6px;
+    border-radius: 7px;
+    border: 1px solid #cbd5e1;
+    font-size: 0.78rem;
+    text-align: right;
+}
+
 .audit-sample-btn {
     border: 1.5px solid #0d9488;
     background: #f0fdfa;

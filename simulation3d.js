@@ -855,7 +855,8 @@ if (shapeType === "fabric") {
 
             if (canAlongZ) {
                 const inDoor = (doorOpts && doorOpts.enforce && curX + p.rollD > CL - doorOpts.headerZone);
-                const kLim = calcMaxKFor(p, inDoor ? Math.min(CH, doorOpts.doorH) : CH);
+                const effH = inDoor ? Math.min(CH, doorOpts.doorH) : CH;
+                const kLim = Math.max(0, Math.floor((effH + 0.002) / p.rollD));
                 const nColsZ = Math.floor((CW + 0.002) / p.rollL);
                 const bayCap = nColsZ * kLim;
                 if (bayCap > 0) {
@@ -874,12 +875,49 @@ if (shapeType === "fabric") {
 
         const p = bestChoice.p;
         if (bestChoice.axis === "X") {
-            let topUsedY = 0;
+            const bayCircles = []; // { cy, cz, r } in container (Y, Z) cross-section
+            let maxFloorEndZ = -CW / 2;
+            let lastFullTopY = 0;
             let bayRollsPlaced = 0;
+
+            const hasCrossSectionOverlap = (cy, cz, r) => {
+                for (let i = 0; i < bayCircles.length; i++) {
+                    const b = bayCircles[i];
+                    const dy = cy - b.cy;
+                    const dz = cz - b.cz;
+                    if (dy * dy + dz * dz < (r + b.r - 0.005) * (r + b.r - 0.005)) return true;
+                }
+                return false;
+            };
+
+            const isRollSupportedInBay = (ry, rz, d) => {
+                if (ry <= 0.002) return true; // Resting on container floor
+                const r = d / 2;
+                const cy = ry + r;
+                const cz = rz + r;
+                // Container side walls act as lateral support for edge rolls on staggered even layers
+                let hasLeftSupport = (rz <= -CW / 2 + 0.03);
+                let hasRightSupport = (rz + d >= CW / 2 - 0.03);
+                for (let i = 0; i < bayCircles.length; i++) {
+                    const b = bayCircles[i];
+                    if (b.cy >= cy - 0.005) continue; // must be strictly below
+                    const dy = cy - b.cy;
+                    const dz = cz - b.cz;
+                    const dist = Math.sqrt(dy * dy + dz * dz);
+                    if (dist <= r + b.r + 0.035) {
+                        if (Math.abs(dz) <= Math.max(r, b.r) * 0.45) return true; // directly underneath
+                        if (dz >= 0) hasLeftSupport = true;
+                        if (dz <= 0) hasRightSupport = true;
+                    }
+                }
+                return hasLeftSupport && hasRightSupport;
+            };
+
             for (let k = 0; k < bestChoice.kLim; k++) {
                 const ry = Math.round(k * p.hexDy * 1000) / 1000;
                 const zOffset = (isStaggered && k % 2 === 1) ? (p.rollD / 2) : 0;
                 const nCols = (k % 2 === 0) ? bestChoice.nEven : bestChoice.nOdd;
+                let rowPlaced = 0;
                 for (let c = 0; c < nCols; c++) {
                     if (p.rem <= 0) break;
                     if (enforcePayload && totalPlacedWeight + p.unitWeight > spec.payload * 1.05) {
@@ -888,8 +926,13 @@ if (shapeType === "fabric") {
                     }
                     const rz = Math.round((-CW / 2 + zOffset + c * p.rollD) * 1000) / 1000;
                     recordPoolRoll(p, curX, ry, rz, p.rollL, p.rollD, p.rollD, true);
+                    bayCircles.push({ cy: ry + p.rollD / 2, cz: rz + p.rollD / 2, r: p.rollD / 2 });
+                    if (k === 0 && rz + p.rollD > maxFloorEndZ) maxFloorEndZ = rz + p.rollD;
                     bayRollsPlaced++;
-                    if (ry + p.rollD > topUsedY) topUsedY = ry + p.rollD;
+                    rowPlaced++;
+                }
+                if (rowPlaced === nCols && nCols > 0) {
+                    lastFullTopY = Math.round((ry + p.rollD) * 1000) / 1000;
                 }
                 if (hitPayloadLimit || p.rem <= 0) break;
             }
@@ -897,13 +940,41 @@ if (shapeType === "fabric") {
             if (allowCrossSkuMix && !hitPayloadLimit && bayRollsPlaced > 0) {
                 const inDoor = (doorOpts && doorOpts.enforce && curX + bestChoice.bayLen > CL - doorOpts.headerZone);
                 const bayMaxH = inDoor ? Math.min(CH, doorOpts.doorH) : CH;
-                if (topUsedY + 0.15 < bayMaxH) {
+
+                // 1) If floor (y=0) still has unused width on the right, fill floor first with other SKUs
+                if (maxFloorEndZ + 0.10 < CW / 2) {
+                    for (let mIdx = 0; mIdx < pool.length && !hitPayloadLimit; mIdx++) {
+                        const mp = pool[mIdx];
+                        if (mp.rem <= 0) continue;
+                        if (mp.rollL > bestChoice.bayLen + 0.002) continue;
+                        while (mp.rem > 0 && maxFloorEndZ + mp.rollD <= CW / 2 + 0.002) {
+                            if (enforcePayload && totalPlacedWeight + mp.unitWeight > spec.payload * 1.05) {
+                                hitPayloadLimit = true;
+                                break;
+                            }
+                            const rz = Math.round(maxFloorEndZ * 1000) / 1000;
+                            const cy = mp.rollD / 2;
+                            const cz = rz + mp.rollD / 2;
+                            if (!hasCrossSectionOverlap(cy, cz, mp.rollD / 2)) {
+                                recordPoolRoll(mp, curX, 0, rz, mp.rollL, mp.rollD, mp.rollD, true);
+                                bayCircles.push({ cy, cz, r: mp.rollD / 2 });
+                                maxFloorEndZ = Math.round((rz + mp.rollD) * 1000) / 1000;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // 2) Fill remaining headroom ONLY where physically supported from below
+                let mixY = lastFullTopY;
+                if (mixY + 0.15 < bayMaxH) {
                     for (let mIdx = 0; mIdx < pool.length && !hitPayloadLimit; mIdx++) {
                         const mp = pool[mIdx];
                         if (mp.rem <= 0 || mp.floorOnly) continue;
                         if (mp.rollL > bestChoice.bayLen + 0.002) continue;
-                        while (mp.rem > 0 && topUsedY + mp.rollD <= bayMaxH + 0.001) {
-                            const ry = Math.round(topUsedY * 1000) / 1000;
+                        while (mp.rem > 0 && mixY + mp.rollD <= bayMaxH + 0.001) {
+                            const ry = Math.round(mixY * 1000) / 1000;
                             const nCols = Math.floor((CW + 0.002) / mp.rollD);
                             let placedInRow = 0;
                             for (let c = 0; c < nCols && mp.rem > 0; c++) {
@@ -912,11 +983,16 @@ if (shapeType === "fabric") {
                                     break;
                                 }
                                 const rz = Math.round((-CW / 2 + c * mp.rollD) * 1000) / 1000;
+                                const cy = ry + mp.rollD / 2;
+                                const cz = rz + mp.rollD / 2;
+                                if (hasCrossSectionOverlap(cy, cz, mp.rollD / 2)) continue;
+                                if (!isRollSupportedInBay(ry, rz, mp.rollD)) continue;
                                 recordPoolRoll(mp, curX, ry, rz, mp.rollL, mp.rollD, mp.rollD, true);
+                                bayCircles.push({ cy, cz, r: mp.rollD / 2 });
                                 placedInRow++;
                             }
                             if (placedInRow === 0 || hitPayloadLimit) break;
-                            topUsedY = Math.round((topUsedY + mp.hexDy) * 1000) / 1000;
+                            mixY = Math.round((mixY + mp.rollD) * 1000) / 1000;
                         }
                     }
                 }
@@ -925,9 +1001,8 @@ if (shapeType === "fabric") {
             curX = Math.round((curX + bestChoice.bayLen) * 1000) / 1000;
         } else {
             for (let k = 0; k < bestChoice.kLim && p.rem > 0; k++) {
-                const ry = Math.round(k * p.hexDy * 1000) / 1000;
-                const xShift = (isStaggered && k % 2 === 1) ? (p.rollD / 2) : 0;
-                const rx = Math.round((curX + xShift) * 1000) / 1000;
+                const ry = Math.round(k * p.rollD * 1000) / 1000;
+                const rx = curX;
                 if (rx + p.rollD > CL + 0.001) continue;
                 for (let c = 0; c < bestChoice.nColsZ && p.rem > 0; c++) {
                     if (enforcePayload && totalPlacedWeight + p.unitWeight > spec.payload * 1.05) {

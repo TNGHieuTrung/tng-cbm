@@ -103,6 +103,13 @@
                         <small data-i18n="selector.cbm.desc">Tính thể tích khối hàng hóa nhanh chóng</small>
                     </div>
                 </button>
+                <button class="selector-tab" data-tab="supplier-audit">
+                    <i class="fas fa-clipboard-check"></i>
+                    <div>
+                        <strong>Kiểm tra Tải hàng NCC (Nhập vải)</strong>
+                        <small>Nhập Packing List cuộn vải, quy đổi Ø từ CBM/KL &amp; đối chiếu 3D</small>
+                    </div>
+                </button>
             </div>
         </div>
     </section>
@@ -119,7 +126,6 @@
                     </div>
                     <div class="toolbar-right">
                         <a href="mailto:hieutrung@tng.vn" class="toolbar-btn" style="text-decoration:none;"><i class="fas fa-headset"></i> Hỗ trợ TNG</a>
-                        <button class="toolbar-btn toolbar-btn-audit" id="btnOpenSupplierAuditTop" title="Kiểm tra & đối chiếu việc tải hàng vải của Nhà cung cấp"><i class="fas fa-clipboard-check"></i> <span>Kiểm tra NCC (Nhập vải)</span></button>
                         <button class="toolbar-btn" id="btnOpenPasteExcel" title="Copy từ Excel / Google Sheets và dán trực tiếp (Ctrl+V)"><i class="fas fa-paste"></i> <span data-i18n="app.pasteExcel">Dán Excel</span></button>
                         <button class="toolbar-btn" id="btnImportExcel" title="Nhập Excel / CSV"><i class="fas fa-file-excel"></i> <span data-i18n="app.importExcel">Nhập Excel</span></button>
                         <button class="toolbar-btn" id="btnExportExcel" title="Xuất file Excel"><i class="fas fa-file-export"></i> <span data-i18n="app.exportExcel">Xuất Excel</span></button>
@@ -771,33 +777,82 @@
         </div>
     </section>
 
-    <!-- Supplier Loading Audit Section (Import Fabric Rolls & Verification) -->
-    <section class="supplier-audit-section" id="supplierAuditSection">
+    <!-- Supplier Loading Audit Section (Import Fabric Rolls & Verification - Standalone Tool) -->
+    <section class="supplier-audit-section" id="supplierAuditSection" style="display:none;">
         <div class="container">
             <div class="audit-card">
                 <div class="audit-header">
                     <div class="audit-title-group">
                         <span class="audit-badge"><i class="fas fa-clipboard-check"></i> NHẬP KHẨU VẢI &amp; KIỂM SOÁT NHÀ CUNG CẤP</span>
                         <h3>Kiểm tra &amp; Đối chiếu Tải hàng Nhà cung cấp (Supplier Loading Audit)</h3>
-                        <p>Nhập số lượng container &amp; số cây vải/kiện hàng NCC báo xếp được để AI TNG kiểm tra chéo (phát hiện xếp ẩu, lãng phí chỗ hoặc khai khống Packing List).</p>
+                        <p>Nhập Packing List từ NCC (Excel/CSV hoặc dán bảng), tự động quy đổi đường kính cuộn từ CBM hoặc Cân nặng, và mô phỏng 3D kiểm tra độ tối ưu cont.</p>
                     </div>
                     <div class="audit-header-actions">
-                        <button type="button" class="audit-sample-btn" id="btnLoadFabricSample"><i class="fas fa-scroll"></i> Nạp mẫu lô Vải cuộn NCC</button>
+                        <button type="button" class="audit-sample-btn audit-pl-btn" id="btnImportSupplierPl"><i class="fas fa-file-excel"></i> Nhập PL NCC (.xls/.xlsx/.csv)</button>
+                        <button type="button" class="audit-sample-btn" id="btnPasteSupplierPl"><i class="fas fa-paste"></i> Dán bảng PL</button>
+                        <button type="button" class="audit-sample-btn" id="btnLoadFabricSample"><i class="fas fa-scroll"></i> Nạp mẫu lô Vải</button>
+                        <input type="file" id="supplierPlFileInput" accept=".xlsx,.xls,.csv" style="display:none;">
                     </div>
+                </div>
+
+                <!-- Paste Packing List Drawer -->
+                <div class="audit-pl-paste-box" id="auditPlPasteBox" style="display:none;">
+                    <div class="audit-pl-paste-head">
+                        <strong><i class="fas fa-table"></i> Dán trực tiếp bảng Packing List từ Excel / Email (hỗ trợ có hoặc không có cột Container, Width, N.W., CBM)</strong>
+                        <button type="button" class="bulk-mini-btn" id="btnCloseAuditPlPaste"><i class="fas fa-times"></i> Đóng</button>
+                    </div>
+                    <textarea id="auditPlPasteInput" rows="5" placeholder="Copy các dòng từ Excel (kể cả tiêu đề cột như CONTAINER, DESCRIPTION, WIDTH, PKGS, N.W., VOLUME...) rồi Ctrl+V vào đây..."></textarea>
+                    <div class="audit-pl-paste-actions">
+                        <button type="button" class="audit-run-btn" id="btnParseAuditPlPaste"><i class="fas fa-magic"></i> Phân tích &amp; Nạp vào bảng</button>
+                    </div>
+                </div>
+
+                <!-- Imported PL Summary & Container Selector Bar -->
+                <div class="audit-pl-filter-bar" id="auditPlFilterBar" style="display:none;">
+                    <div class="audit-pl-summary-info" id="auditPlSummaryInfo">—</div>
+                    <label class="audit-pl-cont-select-wrap">
+                        <span>Lọc theo Container:</span>
+                        <select id="auditPlContainerFilter"></select>
+                    </label>
                 </div>
 
                 <div class="audit-grid">
                     <!-- Left: Per-SKU Fabric Roll Input, Supplier Claim & Automated Verdict -->
                     <div class="audit-panel">
                         <div class="audit-panel-top">
-                            <h4><i class="fas fa-scroll"></i> 1. Nhập thông số từng mã Cuộn vải &amp; SL NCC báo</h4>
+                            <h4><i class="fas fa-scroll"></i> 1. Thông số từng mã Cuộn vải &amp; SL NCC báo</h4>
                             <div class="audit-radius-bar">
-                                <span>Nhập theo:</span>
+                                <span>Hiển thị:</span>
                                 <div class="unit-switcher" id="auditRadiusSwitcher">
                                     <button type="button" class="unit-btn active" data-rad-mode="diameter">Ø Đường kính (cm)</button>
                                     <button type="button" class="unit-btn" data-rad-mode="radius">R Bán kính (cm)</button>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Auto Diameter Estimation Bar -->
+                        <div class="audit-diam-est-bar" id="auditDiamEstBar">
+                            <label class="audit-est-label">
+                                <span><i class="fas fa-ruler-combined"></i> Cách lấy Ø cuộn:</span>
+                                <select id="auditDiamEstMode">
+                                    <option value="manual">Nhập tay Ø / R (cm)</option>
+                                    <option value="box-cbm">Từ CBM hộp bao: √(CBM / L)</option>
+                                    <option value="cyl-cbm">Từ CBM hình trụ: √(4·CBM / πL)</option>
+                                    <option value="weight">Từ Cân nặng + Tỷ trọng vải (ρ)</option>
+                                </select>
+                            </label>
+                            <div class="audit-density-wrap" id="auditDensityWrap" style="display:none;">
+                                <select id="auditDensityPreset" title="Chọn tỷ trọng vải theo chất liệu">
+                                    <option value="250" selected>Dệt kim / Cotton-Poly (~250 kg/m³)</option>
+                                    <option value="280">Rib / Thun dày (~280 kg/m³)</option>
+                                    <option value="320">Dệt thoi / Kaki / Denim (~320 kg/m³)</option>
+                                    <option value="210">Vải mỏng / Jersey (~210 kg/m³)</option>
+                                    <option value="custom">Tự nhập ρ...</option>
+                                </select>
+                                <input type="number" id="auditDensityCustom" value="250" min="80" max="900" step="10" title="Tỷ trọng đóng cuộn (kg/m³)">
+                                <span style="font-size:0.75rem;color:#64748b;">kg/m³</span>
+                            </div>
+                            <button type="button" class="bulk-mini-btn" id="btnRecalcAuditDiam" title="Tính lại Ø cho tất cả các dòng theo công thức đang chọn"><i class="fas fa-sync-alt"></i> Quy đổi Ø</button>
                         </div>
 
                         <!-- Per-SKU Fabric Roll Table -->
@@ -808,6 +863,7 @@
                                         <th style="width:28px;">#</th>
                                         <th>Mã hàng / Vải</th>
                                         <th>Khổ L (cm)</th>
+                                        <th>CBM/cuộn</th>
                                         <th id="auditRadColHeader">Ø Đường kính (cm)</th>
                                         <th>KL (kg)</th>
                                         <th>SL Lô hàng</th>
@@ -1394,7 +1450,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="i18n.js?v=20261128-f1"></script>
-    <script src="simulation3d.js?v=20261128-f5"></script>
-    <script src="main.js?v=20261128-f5"></script>
+    <script src="simulation3d.js?v=20261128-f8"></script>
+    <script src="main.js?v=20261128-f8"></script>
 </body>
 </html>

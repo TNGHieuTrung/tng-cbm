@@ -300,11 +300,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     updateEffectiveDimsUI();
 
-    // 3. Calculator Tab Selector (Load Planner vs CBM Calculator)
+    // 3. Calculator Tab Selector (Load Planner vs CBM Calculator vs Supplier Audit)
     const selectorTabs = document.querySelectorAll('.selector-tab');
     const loadPlannerSection = document.getElementById('loadPlanner');
     const simulationSection = document.getElementById('simulation');
     const cbmSection = document.getElementById('cbmCalc');
+    const supplierAuditSectionEl = document.getElementById('supplierAuditSection');
 
     selectorTabs.forEach(tab => {
         tab.addEventListener('click', () => {
@@ -316,10 +317,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (loadPlannerSection) loadPlannerSection.style.display = 'block';
                 if (simulationSection) simulationSection.style.display = 'block';
                 if (cbmSection) cbmSection.style.display = 'none';
+                if (supplierAuditSectionEl) supplierAuditSectionEl.style.display = 'none';
             } else if (targetTab === 'cbm-calc') {
                 if (loadPlannerSection) loadPlannerSection.style.display = 'none';
                 if (simulationSection) simulationSection.style.display = 'none';
                 if (cbmSection) cbmSection.style.display = 'block';
+                if (supplierAuditSectionEl) supplierAuditSectionEl.style.display = 'none';
+            } else if (targetTab === 'supplier-audit') {
+                if (loadPlannerSection) loadPlannerSection.style.display = 'none';
+                if (cbmSection) cbmSection.style.display = 'none';
+                if (supplierAuditSectionEl) supplierAuditSectionEl.style.display = 'block';
+                if (simulationSection) simulationSection.style.display = 'block';
+                if (simulation && typeof simulation.onResize === 'function') {
+                    setTimeout(() => simulation.onResize(), 50);
+                }
             }
         });
     });
@@ -2045,9 +2056,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ===== 8D. Supplier Loading Audit (Import Fabric Rolls & Verification) =====
-    const btnOpenSupplierAuditTop = document.getElementById('btnOpenSupplierAuditTop');
-    const supplierAuditSection = document.getElementById('supplierAuditSection');
     const btnLoadFabricSample = document.getElementById('btnLoadFabricSample');
+    const btnImportSupplierPl = document.getElementById('btnImportSupplierPl');
+    const supplierPlFileInput = document.getElementById('supplierPlFileInput');
+    const btnPasteSupplierPl = document.getElementById('btnPasteSupplierPl');
+    const auditPlPasteBox = document.getElementById('auditPlPasteBox');
+    const auditPlPasteInput = document.getElementById('auditPlPasteInput');
+    const btnCloseAuditPlPaste = document.getElementById('btnCloseAuditPlPaste');
+    const btnParseAuditPlPaste = document.getElementById('btnParseAuditPlPaste');
+    const auditPlFilterBar = document.getElementById('auditPlFilterBar');
+    const auditPlSummaryInfo = document.getElementById('auditPlSummaryInfo');
+    const auditPlContainerFilter = document.getElementById('auditPlContainerFilter');
+    const auditDiamEstMode = document.getElementById('auditDiamEstMode');
+    const auditDensityWrap = document.getElementById('auditDensityWrap');
+    const auditDensityPreset = document.getElementById('auditDensityPreset');
+    const auditDensityCustom = document.getElementById('auditDensityCustom');
+    const btnRecalcAuditDiam = document.getElementById('btnRecalcAuditDiam');
+
     const btnRunSupplierAudit = document.getElementById('btnRunSupplierAudit');
     const btnExportAuditPdf = document.getElementById('btnExportAuditPdf');
     const btnUploadSupplierPhoto = document.getElementById('btnUploadSupplierPhoto');
@@ -2068,6 +2093,70 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastAuditReport = null;
     let uploadedSupplierPhotoUrl = '';
     let auditRadMode = 'diameter'; // 'diameter' | 'radius'
+    let importedPlData = null; // { sourceName, containers: Map<contNo, rows[]>, allOceanRows: rows[], allRows: rows[] }
+
+    function getAuditDensityKgM3() {
+        const val = parseFloat(auditDensityCustom?.value);
+        return (val && val > 0) ? val : 250;
+    }
+
+    function computeEstimatedDiamCm(lenCm, cbmPerRoll, wtKg, mode) {
+        if (mode === 'box-cbm' && cbmPerRoll > 0 && lenCm > 0) {
+            return Math.sqrt((cbmPerRoll * 1e6) / lenCm);
+        }
+        if (mode === 'cyl-cbm' && cbmPerRoll > 0 && lenCm > 0) {
+            return Math.sqrt((4 * cbmPerRoll * 1e6) / (Math.PI * lenCm));
+        }
+        if (mode === 'weight' && wtKg > 0 && lenCm > 0) {
+            const rho = getAuditDensityKgM3();
+            return Math.sqrt((4 * (wtKg / rho) * 1e6) / (Math.PI * lenCm));
+        }
+        return null;
+    }
+
+    function applyDiamEstimateToRow(tr, mode) {
+        if (!tr || !mode || mode === 'manual') return false;
+        const lenCm = parseFloat(tr.querySelector('.audit-row-len')?.value) || 0;
+        const cbmPerRoll = parseFloat(tr.querySelector('.audit-row-cbm')?.value) || 0;
+        const wtKg = parseFloat(tr.querySelector('.audit-row-wt')?.value) || 0;
+        const estDiam = computeEstimatedDiamCm(lenCm, cbmPerRoll, wtKg, mode);
+        if (!estDiam || !isFinite(estDiam) || estDiam <= 1) return false;
+
+        const radInp = tr.querySelector('.audit-row-rad');
+        const pairSpan = tr.querySelector('.audit-rad-pair');
+        if (radInp) {
+            radInp.value = auditRadMode === 'radius'
+                ? parseFloat((estDiam / 2).toFixed(2))
+                : parseFloat(estDiam.toFixed(2));
+        }
+        if (pairSpan) {
+            pairSpan.textContent = auditRadMode === 'radius'
+                ? `Ø = ${estDiam.toFixed(2)} cm`
+                : `R = ${(estDiam / 2).toFixed(2)} cm`;
+        }
+        return true;
+    }
+
+    function recalculateAllAuditDiameters(silent = false) {
+        const mode = auditDiamEstMode?.value || 'manual';
+        if (mode === 'manual' || !auditFabricSkuBody) return;
+        let updated = 0;
+        auditFabricSkuBody.querySelectorAll('tr').forEach(tr => {
+            if (applyDiamEstimateToRow(tr, mode)) updated++;
+        });
+        if (!silent) {
+            if (updated > 0) {
+                const labelMap = {
+                    'box-cbm': 'CBM hộp bao √(CBM/L)',
+                    'cyl-cbm': 'CBM hình trụ √(4·CBM/πL)',
+                    'weight': `Cân nặng + Tỷ trọng ${getAuditDensityKgM3()} kg/m³`
+                };
+                showToast(`Đã quy đổi Ø cho ${updated} mã vải theo ${labelMap[mode] || mode}`);
+            } else {
+                showToast('Chưa có đủ dữ liệu CBM hoặc Cân nặng trên các dòng để quy đổi Ø!', true);
+            }
+        }
+    }
 
     function updateAuditSkuTotalBadge() {
         if (!auditFabricSkuBody) return;
@@ -2087,20 +2176,28 @@ document.addEventListener('DOMContentLoaded', () => {
     function addAuditFabricRow(row = {}) {
         if (!auditFabricSkuBody) return;
         const idx = auditFabricSkuBody.querySelectorAll('tr').length + 1;
-        const dCm = parseFloat(row.diamCm) || 32;
+        const lenCm = parseFloat(row.lenCm) || 160;
+        const wt = row.wt ?? 28;
+        const cbmPerRoll = (row.cbmPerRoll !== undefined && row.cbmPerRoll !== null)
+            ? parseFloat(row.cbmPerRoll)
+            : parseFloat((((parseFloat(row.diamCm) || 32) ** 2) * lenCm / 1e6).toFixed(3));
+        const mode = auditDiamEstMode?.value || 'manual';
+        const estDiam = (mode !== 'manual') ? computeEstimatedDiamCm(lenCm, cbmPerRoll, wt, mode) : null;
+        const dCm = parseFloat(row.diamCm) || estDiam || 32;
         const dispVal = auditRadMode === 'radius' ? parseFloat((dCm / 2).toFixed(2)) : parseFloat(dCm.toFixed(2));
         const pairText = auditRadMode === 'radius' ? `Ø = ${parseFloat(dCm.toFixed(2))} cm` : `R = ${parseFloat((dCm / 2).toFixed(2))} cm`;
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td class="audit-row-idx" style="text-align:center;font-weight:700;">${idx}</td>
-            <td><input type="text" class="audit-row-name" value="${row.name || `Vải mã ${idx}`}"></td>
-            <td><input type="number" class="audit-row-len" min="10" step="any" value="${row.lenCm || 160}"></td>
+            <td><input type="text" class="audit-row-name" value="${String(row.name || `Vải mã ${idx}`).replace(/"/g, '&quot;')}"></td>
+            <td><input type="number" class="audit-row-len" min="10" step="any" value="${parseFloat(lenCm.toFixed(1))}"></td>
+            <td><input type="number" class="audit-row-cbm" min="0" step="0.001" value="${isFinite(cbmPerRoll) ? parseFloat(cbmPerRoll.toFixed(4)) : 0}"></td>
             <td>
                 <input type="number" class="audit-row-rad" min="1" step="any" value="${dispVal}">
                 <span class="audit-rad-pair">${pairText}</span>
             </td>
-            <td><input type="number" class="audit-row-wt" min="0" step="0.1" value="${row.wt ?? 28}"></td>
+            <td><input type="number" class="audit-row-wt" min="0" step="0.1" value="${parseFloat(Number(wt).toFixed(2))}"></td>
             <td><input type="number" class="audit-row-lot-qty" min="1" value="${row.lotQty || 150}"></td>
             <td><input type="number" class="audit-row-sup-qty" min="0" value="${row.supQty ?? 120}"></td>
             <td style="text-align:center;"><button type="button" class="audit-del-row-btn" title="Xóa mã"><i class="fas fa-trash-alt"></i></button></td>
@@ -2116,6 +2213,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     : `R = ${parseFloat((v / 2).toFixed(2))} cm`;
             });
         }
+        tr.querySelectorAll('.audit-row-len, .audit-row-cbm, .audit-row-wt').forEach(inp => {
+            inp.addEventListener('input', () => {
+                const curMode = auditDiamEstMode?.value || 'manual';
+                if (curMode !== 'manual') applyDiamEstimateToRow(tr, curMode);
+            });
+        });
         tr.querySelectorAll('.audit-row-lot-qty, .audit-row-sup-qty').forEach(inp => {
             inp.addEventListener('input', updateAuditSkuTotalBadge);
         });
@@ -2140,6 +2243,362 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!auditFabricSkuBody) return;
         auditFabricSkuBody.innerHTML = '';
         rows.forEach(r => addAuditFabricRow(r));
+    }
+
+    if (auditDiamEstMode) {
+        auditDiamEstMode.addEventListener('change', () => {
+            const m = auditDiamEstMode.value;
+            if (auditDensityWrap) auditDensityWrap.style.display = (m === 'weight') ? 'inline-flex' : 'none';
+            if (m !== 'manual') recalculateAllAuditDiameters(false);
+        });
+    }
+    if (auditDensityPreset && auditDensityCustom) {
+        auditDensityPreset.addEventListener('change', () => {
+            if (auditDensityPreset.value !== 'custom') {
+                auditDensityCustom.value = auditDensityPreset.value;
+                if (auditDiamEstMode?.value === 'weight') recalculateAllAuditDiameters(false);
+            }
+        });
+        auditDensityCustom.addEventListener('input', () => {
+            if (auditDensityPreset) auditDensityPreset.value = 'custom';
+            if (auditDiamEstMode?.value === 'weight') recalculateAllAuditDiameters(true);
+        });
+    }
+    if (btnRecalcAuditDiam) {
+        btnRecalcAuditDiam.addEventListener('click', () => {
+            if (auditDiamEstMode?.value === 'manual') {
+                auditDiamEstMode.value = 'box-cbm';
+            }
+            recalculateAllAuditDiameters(false);
+        });
+    }
+
+    // ===== Supplier Packing List (Excel / CSV / Paste) Smart Parser =====
+    function parsePlNumeric(val) {
+        if (typeof val === 'number') return isFinite(val) ? val : 0;
+        const s = String(val || '').replace(/,/g, '').trim();
+        const m = s.match(/-?\d+(\.\d+)?/);
+        return m ? parseFloat(m[0]) : 0;
+    }
+
+    function normalizeWidthCm(rawW) {
+        const w = parsePlNumeric(rawW);
+        if (!w || w <= 0) return 0;
+        if (w < 5) return Math.round(w * 100 * 10) / 10; // meters -> cm
+        if (w > 450) return Math.round((w / 10) * 10) / 10; // mm -> cm
+        return Math.round(w * 10) / 10;
+    }
+
+    function parseSupplierPackingListMatrix(matrixRows, sourceName = 'Packing List NCC', sheetName = '') {
+        if (!Array.isArray(matrixRows) || matrixRows.length === 0) return null;
+        const sheetContMatch = String(sheetName || '').trim().match(/\b[A-Z]{4}\d{7}\b/);
+        const defaultCont = sheetContMatch ? sheetContMatch[0] : 'CHUNG';
+
+        // 1. Locate header row by keyword scoring
+        let headerIdx = -1;
+        let bestScore = 0;
+        const colMap = { cont: -1, desc: -1, color: -1, width: -1, qty: -1, nw: -1, cbm: -1, lot: -1 };
+
+        for (let r = 0; r < Math.min(45, matrixRows.length); r++) {
+            const row = matrixRows[r] || [];
+            let score = 0;
+            let qtyPrio = 0;
+            const tempMap = { cont: -1, desc: -1, color: -1, width: -1, qty: -1, nw: -1, cbm: -1, lot: -1 };
+            row.forEach((cell, c) => {
+                const txt = String(cell || '').toLowerCase().replace(/\s+/g, ' ').trim();
+                if (!txt) return;
+                if (tempMap.cont < 0 && /(container|cont\b|cntr)/.test(txt)) { tempMap.cont = c; score += 3; }
+                if (tempMap.width < 0 && /(width|khổ|kho\b|w\(cm\))/.test(txt)) { tempMap.width = c; score += 3; }
+                if (tempMap.nw < 0 && /(n\.w|net\s*w|weight|k\.l|trọng lượng|nw\b)/.test(txt) && !/gross|g\.w/.test(txt)) { tempMap.nw = c; score += 3; }
+                if (tempMap.cbm < 0 && /(volume|cbm|cube|m3|m³)/.test(txt)) { tempMap.cbm = c; score += 3; }
+
+                // Prioritize PKGS / ROLLS count; NEVER match "ROLL NO" / "CTN NO" / "QTY (YARDS)"
+                if (!/(yds|yard|meter|metre|price|amount|usd|unit|no\.|no\b|#|\bid\b|code|rfid)/.test(txt)) {
+                    if (/(pkgs|pkg|rolls|cây|cuộn|kiện|bale)/.test(txt) && qtyPrio < 2) {
+                        tempMap.qty = c;
+                        if (qtyPrio === 0) score += 3;
+                        qtyPrio = 2;
+                    } else if (/(qty|q'ty|sl|pcs|ctn)/.test(txt) && qtyPrio < 1) {
+                        tempMap.qty = c;
+                        score += 1;
+                        qtyPrio = 1;
+                    }
+                }
+
+                if (tempMap.desc < 0 && /(desc|item|fabric|style|art|mã|tên|quality|iman)/.test(txt)) { tempMap.desc = c; score += 2; }
+                if (tempMap.color < 0 && /(color|colour|màu)/.test(txt)) { tempMap.color = c; score += 1; }
+                if (tempMap.lot < 0 && /(lot|batch|dye)/.test(txt)) { tempMap.lot = c; score += 1; }
+            });
+            if (score > bestScore && (tempMap.width >= 0 || tempMap.nw >= 0 || tempMap.cbm >= 0)) {
+                bestScore = score;
+                headerIdx = r;
+                Object.assign(colMap, tempMap);
+            }
+        }
+
+        if (headerIdx < 0 || (colMap.width < 0 && colMap.nw < 0 && colMap.cbm < 0)) {
+            return null;
+        }
+
+        // 2. Scan data rows after headerIdx
+        let currentCont = defaultCont;
+        const groups = new Map(); // key = cont||name||widthCm
+
+        for (let r = headerIdx + 1; r < matrixRows.length; r++) {
+            const row = matrixRows[r] || [];
+            const rowJoined = row.map(x => String(x || '').trim()).join(' ').trim();
+            if (!rowJoined) continue;
+            if (/^(total|sub\s*total|grand\s*total|tổng|measurement)/i.test(rowJoined)) continue;
+
+            // Detect container number anywhere in container col or row
+            const contCell = colMap.cont >= 0 ? String(row[colMap.cont] || '').trim() : '';
+            const contMatch = (contCell + ' ' + rowJoined).match(/\b[A-Z]{4}\d{7}\b/);
+            if (contMatch) {
+                currentCont = contMatch[0];
+            } else if (contCell && contCell.length >= 4 && !/^(total|summary)/i.test(contCell)) {
+                currentCont = contCell;
+            }
+
+            const widthCm = colMap.width >= 0 ? normalizeWidthCm(row[colMap.width]) : 0;
+            const nw = colMap.nw >= 0 ? parsePlNumeric(row[colMap.nw]) : 0;
+            const cbm = colMap.cbm >= 0 ? parsePlNumeric(row[colMap.cbm]) : 0;
+            let qty = colMap.qty >= 0 ? Math.round(parsePlNumeric(row[colMap.qty])) : 0;
+
+            // Skip non-data / header-repeat / empty metric rows
+            if (widthCm <= 0 || (nw <= 0 && cbm <= 0)) continue;
+            if (qty <= 0) qty = 1; // roll-by-roll row without PKGS count
+
+            const descRaw = colMap.desc >= 0 ? String(row[colMap.desc] || '').trim() : '';
+            const colorRaw = colMap.color >= 0 ? String(row[colMap.color] || '').trim() : '';
+            const lotRaw = colMap.lot >= 0 ? String(row[colMap.lot] || '').trim() : '';
+            let baseName = [descRaw, colorRaw].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+            if (!baseName) baseName = lotRaw ? `Lot ${lotRaw}` : `Vải ${widthCm}cm`;
+            if (baseName.length > 36) baseName = baseName.slice(0, 36).trim();
+
+            const skuKey = `${currentCont}|||${baseName}|||${widthCm}`;
+            if (!groups.has(skuKey)) {
+                groups.set(skuKey, {
+                    containerNo: currentCont,
+                    name: `${baseName} (${widthCm}cm)`,
+                    lenCm: widthCm,
+                    totalQty: 0,
+                    totalNw: 0,
+                    totalCbm: 0
+                });
+            }
+            const g = groups.get(skuKey);
+            g.totalQty += qty;
+            g.totalNw += nw;
+            g.totalCbm += cbm;
+        }
+
+        if (groups.size === 0) return null;
+
+        // 3. Build per-container & aggregate lists
+        const containers = new Map();
+        const allRows = [];
+        const oceanContPattern = /^[A-Z]{4}\d{7}$/;
+
+        groups.forEach(g => {
+            const wtPerRoll = g.totalQty > 0 ? (g.totalNw / g.totalQty) : 0;
+            const cbmPerRoll = g.totalQty > 0 ? (g.totalCbm / g.totalQty) : 0;
+            const item = {
+                containerNo: g.containerNo,
+                name: g.name,
+                lenCm: g.lenCm,
+                wt: wtPerRoll,
+                cbmPerRoll: cbmPerRoll,
+                lotQty: g.totalQty,
+                supQty: g.totalQty
+            };
+            allRows.push(item);
+            if (!containers.has(g.containerNo)) containers.set(g.containerNo, []);
+            containers.get(g.containerNo).push(item);
+        });
+
+        return buildPlBundle(sourceName, containers, allRows);
+    }
+
+    function buildPlBundle(sourceName, containers, allRows) {
+        const oceanContPattern = /^[A-Z]{4}\d{7}$/;
+        const oceanContKeys = Array.from(containers.keys()).filter(k => oceanContPattern.test(k));
+        const targetKeys = oceanContKeys.length > 0 ? oceanContKeys : Array.from(containers.keys());
+        const mergedMap = new Map();
+        targetKeys.forEach(ck => {
+            (containers.get(ck) || []).forEach(it => {
+                const mk = `${it.name}|||${it.lenCm}`;
+                if (!mergedMap.has(mk)) {
+                    mergedMap.set(mk, { ...it, totalNw: it.wt * it.lotQty, totalCbm: it.cbmPerRoll * it.lotQty });
+                } else {
+                    const m = mergedMap.get(mk);
+                    m.lotQty += it.lotQty;
+                    m.supQty += it.supQty;
+                    m.totalNw += it.wt * it.lotQty;
+                    m.totalCbm += it.cbmPerRoll * it.lotQty;
+                    m.wt = m.totalNw / m.lotQty;
+                    m.cbmPerRoll = m.totalCbm / m.lotQty;
+                }
+            });
+        });
+
+        return {
+            sourceName,
+            containers,
+            oceanContCount: oceanContKeys.length > 0 ? oceanContKeys.length : containers.size,
+            allOceanRows: Array.from(mergedMap.values()),
+            allRows
+        };
+    }
+
+    function applyImportedPlSelection(selectionKey) {
+        if (!importedPlData) return;
+        let rows = [];
+        let contCount = 1;
+        if (selectionKey === '__ALL_OCEAN__') {
+            rows = importedPlData.allOceanRows;
+            contCount = Math.max(1, importedPlData.oceanContCount);
+        } else {
+            rows = importedPlData.containers.get(selectionKey) || [];
+            contCount = 1;
+        }
+
+        const hasCbm = rows.some(r => r.cbmPerRoll > 0);
+        if (auditDiamEstMode) {
+            auditDiamEstMode.value = hasCbm ? 'box-cbm' : 'weight';
+            if (auditDensityWrap) auditDensityWrap.style.display = hasCbm ? 'none' : 'inline-flex';
+        }
+
+        const supCntInp = document.getElementById('auditContCount');
+        if (supCntInp) supCntInp.value = contCount;
+        const supNameInp = document.getElementById('auditSupplierName');
+        if (supNameInp && importedPlData.sourceName) {
+            supNameInp.value = importedPlData.sourceName.replace(/\.(xlsx|xls|csv)$/i, '');
+        }
+
+        setAuditFabricRows(rows);
+        recalculateAllAuditDiameters(true);
+
+        const totRolls = rows.reduce((s, r) => s + r.lotQty, 0);
+        const totCbm = rows.reduce((s, r) => s + r.cbmPerRoll * r.lotQty, 0);
+        const totWt = rows.reduce((s, r) => s + r.wt * r.lotQty, 0);
+        if (auditPlSummaryInfo) {
+            auditPlSummaryInfo.innerHTML = `<i class="fas fa-check-circle"></i> <strong>${importedPlData.sourceName}</strong>: ${rows.length} nhóm mã • <strong>${totRolls.toLocaleString()}</strong> cuộn • <strong>${totCbm.toFixed(2)} CBM</strong> • <strong>${totWt.toLocaleString('en-US', { maximumFractionDigits: 1 })} kg</strong> (Đang quy đổi Ø theo <strong>${hasCbm ? 'Box-CBM' : 'Cân nặng'}</strong>)`;
+        }
+    }
+
+    function loadParsedPlIntoUI(parsed) {
+        if (!parsed) {
+            showToast('Không nhận diện được bảng Packing List (cần có cột Khổ vải/Width và Cân nặng hoặc CBM)!', true);
+            return;
+        }
+        importedPlData = parsed;
+        if (auditPlFilterBar) auditPlFilterBar.style.display = 'flex';
+        if (auditPlContainerFilter) {
+            auditPlContainerFilter.innerHTML = '';
+            const optAll = document.createElement('option');
+            optAll.value = '__ALL_OCEAN__';
+            const totOceanRolls = parsed.allOceanRows.reduce((s, r) => s + r.lotQty, 0);
+            optAll.textContent = `Tất cả Cont (${parsed.oceanContCount} cont • ${totOceanRolls.toLocaleString()} cuộn)`;
+            auditPlContainerFilter.appendChild(optAll);
+
+            parsed.containers.forEach((cRows, cNo) => {
+                const opt = document.createElement('option');
+                opt.value = cNo;
+                const cRolls = cRows.reduce((s, r) => s + r.lotQty, 0);
+                const cCbm = cRows.reduce((s, r) => s + r.cbmPerRoll * r.lotQty, 0);
+                opt.textContent = `Cont ${cNo} (${cRolls.toLocaleString()} cuộn • ${cCbm.toFixed(1)} CBM)`;
+                auditPlContainerFilter.appendChild(opt);
+            });
+            auditPlContainerFilter.value = '__ALL_OCEAN__';
+        }
+        applyImportedPlSelection('__ALL_OCEAN__');
+        showToast(`Đã nạp Packing List "${parsed.sourceName}" (${parsed.containers.size} container/nhóm)!`);
+    }
+
+    if (auditPlContainerFilter) {
+        auditPlContainerFilter.addEventListener('change', () => {
+            applyImportedPlSelection(auditPlContainerFilter.value);
+        });
+    }
+
+    if (btnImportSupplierPl && supplierPlFileInput) {
+        btnImportSupplierPl.addEventListener('click', () => supplierPlFileInput.click());
+        supplierPlFileInput.addEventListener('change', (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            if (typeof XLSX === 'undefined') {
+                showToast('Thư viện đọc Excel chưa sẵn sàng!', true);
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const wb = file.name.toLowerCase().endsWith('.csv')
+                        ? XLSX.read(new TextDecoder('utf-8').decode(ev.target.result), { type: 'string' })
+                        : XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+                    const contSheetParses = [];
+                    let bestParsed = null;
+                    let bestSheetScore = -1;
+                    wb.SheetNames.forEach(sn => {
+                        const ws = wb.Sheets[sn];
+                        const matrix = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+                        const p = parseSupplierPackingListMatrix(matrix, file.name, sn);
+                        if (p) {
+                            if (/^[A-Z]{4}\d{7}$/.test(sn.trim())) {
+                                contSheetParses.push(p);
+                            }
+                            const totCbm = p.allRows.reduce((s, r) => s + r.cbmPerRoll * r.lotQty, 0);
+                            const totRolls = p.allRows.reduce((s, r) => s + r.lotQty, 0);
+                            const hasRealCont = Array.from(p.containers.keys()).some(k => /^[A-Z]{4}\d{7}$/.test(k));
+                            const sheetScore = (hasRealCont ? 5000 : 0) + (/pack|pl\b|detail/i.test(sn) ? 1000 : 0) + totCbm * 10 + Math.min(totRolls, 2000);
+                            if (sheetScore > bestSheetScore) {
+                                bestSheetScore = sheetScore;
+                                bestParsed = p;
+                            }
+                        }
+                    });
+                    if (contSheetParses.length >= 2) {
+                        const combinedContainers = new Map();
+                        const combinedAllRows = [];
+                        contSheetParses.forEach(cp => {
+                            cp.containers.forEach((rows, cNo) => {
+                                combinedContainers.set(cNo, rows);
+                                combinedAllRows.push(...rows);
+                            });
+                        });
+                        bestParsed = buildPlBundle(file.name, combinedContainers, combinedAllRows);
+                    }
+                    loadParsedPlIntoUI(bestParsed);
+                } catch (err) {
+                    console.error(err);
+                    showToast('Lỗi đọc file Packing List NCC!', true);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+            supplierPlFileInput.value = '';
+        });
+    }
+
+    if (btnPasteSupplierPl && auditPlPasteBox) {
+        btnPasteSupplierPl.addEventListener('click', () => {
+            auditPlPasteBox.style.display = auditPlPasteBox.style.display === 'none' ? 'block' : 'none';
+        });
+    }
+    if (btnCloseAuditPlPaste && auditPlPasteBox) {
+        btnCloseAuditPlPaste.addEventListener('click', () => { auditPlPasteBox.style.display = 'none'; });
+    }
+    if (btnParseAuditPlPaste && auditPlPasteInput) {
+        btnParseAuditPlPaste.addEventListener('click', () => {
+            const raw = (auditPlPasteInput.value || '').trim();
+            if (!raw) {
+                showToast('Vui lòng dán nội dung bảng Packing List vào ô trống!', true);
+                return;
+            }
+            const lines = raw.split(/\r?\n/).map(l => l.split(/\t|,(?=(?:[^"]*"[^"]*")*[^"]*$)/));
+            const parsed = parseSupplierPackingListMatrix(lines, 'Packing List dán từ Excel');
+            if (parsed && auditPlPasteBox) auditPlPasteBox.style.display = 'none';
+            loadParsedPlIntoUI(parsed);
+        });
     }
 
     function getAuditFabricCargoItems() {
@@ -2217,14 +2676,13 @@ document.addEventListener('DOMContentLoaded', () => {
         { name: 'Vải Thun Cotton 175cm', lenCm: 175, diamCm: 28, wt: 22, lotQty: 95, supQty: 40 }
     ]);
 
-    if (btnOpenSupplierAuditTop && supplierAuditSection) {
-        btnOpenSupplierAuditTop.addEventListener('click', () => {
-            supplierAuditSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-    }
-
     if (btnLoadFabricSample) {
         btnLoadFabricSample.addEventListener('click', () => {
+            importedPlData = null;
+            if (auditPlFilterBar) auditPlFilterBar.style.display = 'none';
+            if (auditDiamEstMode) auditDiamEstMode.value = 'manual';
+            if (auditDensityWrap) auditDensityWrap.style.display = 'none';
+
             setAuditFabricRows([
                 { name: 'Vải Kaki 160cm', lenCm: 160, diamCm: 32, wt: 28, lotQty: 180, supQty: 145 },
                 { name: 'Vải Denim 150cm', lenCm: 150, diamCm: 34, wt: 32, lotQty: 110, supQty: 85 },
@@ -2284,11 +2742,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const auditPayload = document.getElementById('auditEnforcePayload')?.checked !== false;
         const selectedAlgo = document.querySelector('input[name="algorithm"]:checked')?.value || 'best-balance';
 
-        // Sync fabric SKU table rows into main cargo cards (converted to cm, type='fabric') so 3D view matches 100%
-        if (enforcePayloadToggle) enforcePayloadToggle.checked = auditPayload;
-        if (autoFitToggle) autoFitToggle.checked = false;
-        applyCargoItemsToCards(auditItems, 'replace');
-
+        // Keep Export cargo cards untouched so Export & Supplier Audit remain independent tools
         const auditFleet = Array(contCount).fill(contType);
 
         // 1. Capacity under Supplier's claimed loading method (e.g. squareX = no stagger, or crosswise)
