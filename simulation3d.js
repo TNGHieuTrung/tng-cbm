@@ -838,13 +838,27 @@ if (shapeType === "fabric") {
                 let bayCap = 0;
                 for (let k = 0; k < kLim; k++) bayCap += (k % 2 === 0 ? nEven : nOdd);
                 if (bayCap > 0) {
-                    const effCount = allowCrossSkuMix ? bayCap : Math.min(p.rem, bayCap);
-                    const score = (effCount * p.rollVol) / p.rollL;
+                    let effVol = Math.min(p.rem, bayCap) * p.rollVol;
+                    if (allowCrossSkuMix && p.rem < bayCap) {
+                        // Include compatible shorter/equal-length rolls that can share this bay
+                        let spareSlots = bayCap - p.rem;
+                        for (let sIdx = 0; sIdx < pool.length && spareSlots > 0; sIdx++) {
+                            if (sIdx === idx) continue;
+                            const sp = pool[sIdx];
+                            if (sp.rem > 0 && sp.rollL <= p.rollL + 0.002) {
+                                const take = Math.min(sp.rem, spareSlots);
+                                effVol += take * sp.rollVol;
+                                spareSlots -= take;
+                            }
+                        }
+                    }
+                    const score = effVol / p.rollL;
                     const isFullOwn = (p.rem >= bayCap);
+                    const canFillBay = allowCrossSkuMix ? (effVol >= bayCap * p.rollVol * 0.75) : isFullOwn;
                     if (!bestChoice ||
-                        (isFullOwn && !bestChoice.isFullOwn) ||
-                        (isFullOwn === bestChoice.isFullOwn && score > bestChoice.score + 1e-5)) {
-                        bestChoice = { p, axis: "X", bayLen: p.rollL, kLim, nEven, nOdd, bayCap, score, isFullOwn };
+                        (canFillBay && !bestChoice.canFillBay) ||
+                        (canFillBay === bestChoice.canFillBay && score > bestChoice.score + 1e-5)) {
+                        bestChoice = { p, axis: "X", bayLen: p.rollL, kLim, nEven, nOdd, bayCap, score, isFullOwn, canFillBay };
                     }
                 }
             }
@@ -863,7 +877,7 @@ if (shapeType === "fabric") {
                     const effCount = Math.min(p.rem, bayCap);
                     const score = (effCount * p.rollVol) / p.rollD;
                     const isFullOwn = (p.rem >= bayCap);
-                    const preferZ = (fabricMode === "alongZ" || fabricMode === "squareZ") || !canAlongX || (p.rem < bayCap && score > (bestChoice?.score || 0));
+                    const preferZ = (fabricMode === "alongZ" || fabricMode === "squareZ") || !canAlongX;
                     if (preferZ && (!bestChoice || score > bestChoice.score + 1e-5)) {
                         bestChoice = { p, axis: "Z", bayLen: p.rollD, kLim, nColsZ, bayCap, score, isFullOwn };
                     }
@@ -966,35 +980,49 @@ if (shapeType === "fabric") {
                     }
                 }
 
-                // 2) Fill remaining headroom ONLY where physically supported from below
-                let mixY = lastFullTopY;
-                if (mixY + 0.15 < bayMaxH) {
-                    for (let mIdx = 0; mIdx < pool.length && !hitPayloadLimit; mIdx++) {
+                // 2) Gravity-drop fill: place remaining compatible SKUs at the lowest supported Y across Z (0 floating, 0 vertical gaps)
+                const getDropY = (rz, d) => {
+                    let y = 0;
+                    const z0 = rz + 0.015;
+                    const z1 = rz + d - 0.015;
+                    for (let i = 0; i < bayCircles.length; i++) {
+                        const b = bayCircles[i];
+                        if (b.cz + b.r > z0 && b.cz - b.r < z1) {
+                            const top = b.cy + b.r;
+                            if (top > y) y = top;
+                        }
+                    }
+                    return Math.round(y * 1000) / 1000;
+                };
+
+                while (!hitPayloadLimit) {
+                    let bestSlot = null; // { mp, ry, rz }
+                    for (let mIdx = 0; mIdx < pool.length; mIdx++) {
                         const mp = pool[mIdx];
                         if (mp.rem <= 0 || mp.floorOnly) continue;
                         if (mp.rollL > bestChoice.bayLen + 0.002) continue;
-                        while (mp.rem > 0 && mixY + mp.rollD <= bayMaxH + 0.001) {
-                            const ry = Math.round(mixY * 1000) / 1000;
-                            const nCols = Math.floor((CW + 0.002) / mp.rollD);
-                            let placedInRow = 0;
-                            for (let c = 0; c < nCols && mp.rem > 0; c++) {
-                                if (enforcePayload && totalPlacedWeight + mp.unitWeight > spec.payload * 1.05) {
-                                    hitPayloadLimit = true;
-                                    break;
-                                }
-                                const rz = Math.round((-CW / 2 + c * mp.rollD) * 1000) / 1000;
-                                const cy = ry + mp.rollD / 2;
-                                const cz = rz + mp.rollD / 2;
-                                if (hasCrossSectionOverlap(cy, cz, mp.rollD / 2)) continue;
-                                if (!isRollSupportedInBay(ry, rz, mp.rollD)) continue;
-                                recordPoolRoll(mp, curX, ry, rz, mp.rollL, mp.rollD, mp.rollD, true);
-                                bayCircles.push({ cy, cz, r: mp.rollD / 2 });
-                                placedInRow++;
+                        if (enforcePayload && totalPlacedWeight + mp.unitWeight > spec.payload * 1.05) continue;
+
+                        const nCols = Math.floor((CW + 0.002) / mp.rollD);
+                        for (let c = 0; c < nCols; c++) {
+                            const rz = Math.round((-CW / 2 + c * mp.rollD) * 1000) / 1000;
+                            const ry = getDropY(rz, mp.rollD);
+                            if (ry + mp.rollD > bayMaxH + 0.001) continue;
+                            const lenMatch = (mp.rollL >= bestChoice.bayLen - 0.18) ? 1 : 0;
+                            const bestLenMatch = bestSlot ? ((bestSlot.mp.rollL >= bestChoice.bayLen - 0.18) ? 1 : 0) : 0;
+                            const betterByMatch = (lenMatch > bestLenMatch) && (ry <= bestSlot?.ry + 0.35);
+                            const sameMatch = (lenMatch === bestLenMatch);
+                            if (!bestSlot ||
+                                betterByMatch ||
+                                (sameMatch && (ry < bestSlot.ry - 0.005 || (Math.abs(ry - bestSlot.ry) <= 0.005 && (mp.rollL > bestSlot.mp.rollL + 0.02 || (Math.abs(mp.rollL - bestSlot.mp.rollL) <= 0.02 && mp.rollVol > bestSlot.mp.rollVol)))))) {
+                                bestSlot = { mp, ry, rz };
                             }
-                            if (placedInRow === 0 || hitPayloadLimit) break;
-                            mixY = Math.round((mixY + mp.rollD) * 1000) / 1000;
                         }
                     }
+                    if (!bestSlot) break;
+                    const { mp, ry, rz } = bestSlot;
+                    recordPoolRoll(mp, curX, ry, rz, mp.rollL, mp.rollD, mp.rollD, true);
+                    bayCircles.push({ cy: ry + mp.rollD / 2, cz: rz + mp.rollD / 2, r: mp.rollD / 2 });
                 }
             }
 
